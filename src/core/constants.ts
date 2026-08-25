@@ -9,7 +9,7 @@ export const LSP_METHODS = Object.freeze({
 	close: 'textDocument/didClose',
 	diagnostic: 'textDocument/diagnostic',
 	publish: 'textDocument/publishDiagnostics',
-})
+} as const)
 
 /** Lists the position encodings named by Language Server Protocol 3.18. */
 export const LSP_ENCODINGS = Object.freeze(['utf-8', 'utf-16', 'utf-32'] as const)
@@ -49,3 +49,12 @@ export const LSP_REQUEST_FAILED = -32803
  * parser retains its body bytes.
  */
 export const LSP_CONTENT_LIMIT = 67_108_864
+
+/**
+ * Bounds an accepted base-protocol header to 64 KiB.
+ *
+ * @remarks
+ * The limit admits extension fields while refusing boundary-free accumulation before it can grow
+ * without bound.
+ */
+export const LSP_HEADER_LIMIT = 65_536

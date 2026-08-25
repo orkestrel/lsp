@@ -263,8 +263,34 @@ export type LSPErrorCode =
 /** Describes structured details attached to an {@link LSPError}. */
 export interface LSPErrorContext {
 	readonly code?: number
+	readonly messages?: readonly JSONRPCMessage[]
 	readonly value?: unknown
 }
+
+/**
+ * Retains incremental base-protocol bytes and resolved framing metadata between decode calls.
+ *
+ * @remarks
+ * Each state node owns the newest retained byte segment and links to earlier segments through
+ * `previous`. The cumulative `size` lets a continuation append in constant work. `boundary` and
+ * `length` appear together after the header has been resolved, so body continuations do not scan
+ * or parse it again.
+ */
+export type LSPDecodeState =
+	| {
+			readonly bytes: Uint8Array
+			readonly previous?: LSPDecodeState
+			readonly size: number
+			readonly boundary?: never
+			readonly length?: never
+	  }
+	| {
+			readonly bytes: Uint8Array
+			readonly previous?: LSPDecodeState
+			readonly size: number
+			readonly boundary: number
+			readonly length: number
+	  }
 
 /** Configures an {@link LSPError} instance. */
 export interface LSPErrorOptions {
