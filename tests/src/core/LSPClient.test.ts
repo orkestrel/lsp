@@ -1,0 +1,769 @@
+import type {
+	JSONRPCMessage,
+	JSONRPCRequest,
+	LSPDecodeState,
+	LSPExit,
+	LSPServerCapabilities,
+	LSPTextDocumentSyncKind,
+	LSPTransportEventMap,
+	LSPTransportInterface,
+} from '@src/core'
+import {
+	encodeLSPMessage,
+	isJSONRPCRequest,
+	isLSPError,
+	JSONRPC_METHOD_NOT_FOUND,
+	LSPClient,
+	LSPError,
+	LSP_METHODS,
+	parseLSPMessages,
+} from '@src/core'
+import { Emitter } from '@orkestrel/emitter'
+import { createRecorder, waitForDelay } from '@orkestrel/test'
+import { describe, expect, it } from 'vitest'
+
+class LSPFixtureTransport implements LSPTransportInterface {
+	readonly #emitter = new Emitter<LSPTransportEventMap>()
+	readonly #messages: JSONRPCMessage[] = []
+	readonly #operations: string[] = []
+	readonly #capabilities: LSPServerCapabilities
+	readonly #shutdown: boolean
+	readonly #handler:
+		| ((peer: LSPFixtureTransport, message: JSONRPCMessage) => Promise<void> | void)
+		| undefined
+	#state: LSPDecodeState | undefined = undefined
+	#starts = 0
+	#closes = 0
+
+	constructor(options?: {
+		readonly capabilities?: LSPServerCapabilities
+		readonly shutdown?: boolean
+		readonly handler?: (peer: LSPFixtureTransport, message: JSONRPCMessage) => Promise<void> | void
+	}) {
+		this.#capabilities = options?.capabilities ?? { textDocumentSync: 1 }
+		this.#shutdown = options?.shutdown ?? true
+		this.#handler = options?.handler
+	}
+
+	get emitter(): Emitter<LSPTransportEventMap> {
+		return this.#emitter
+	}
+
+	get messages(): readonly JSONRPCMessage[] {
+		return [...this.#messages]
+	}
+
+	get operations(): readonly string[] {
+		return [...this.#operations]
+	}
+
+	get starts(): number {
+		return this.#starts
+	}
+
+	get closes(): number {
+		return this.#closes
+	}
+
+	async start(): Promise<void> {
+		this.#starts += 1
+		this.#operations.push('start')
+	}
+
+	async send(bytes: Uint8Array): Promise<boolean> {
+		const [messages, state] = parseLSPMessages(bytes, this.#state)
+		this.#state = state
+		for (const message of messages) {
+			this.#messages.push(message)
+			this.#operations.push('method' in message ? message.method : 'response')
+			if (isJSONRPCRequest(message) && message.method === LSP_METHODS.initialize)
+				this.receive({
+					jsonrpc: '2.0',
+					id: message.id,
+					result: { capabilities: this.#capabilities },
+				})
+			if (isJSONRPCRequest(message) && message.method === LSP_METHODS.shutdown && this.#shutdown)
+				this.receive({ jsonrpc: '2.0', id: message.id, result: null })
+			await this.#handler?.(this, message)
+		}
+		return true
+	}
+
+	async close(): Promise<void> {
+		this.#closes += 1
+		this.#operations.push('close')
+	}
+
+	receive(message: JSONRPCMessage): void {
+		this.#emitter.emit('chunk', encodeLSPMessage(message))
+	}
+
+	receiveBytes(bytes: Uint8Array): void {
+		this.#emitter.emit('chunk', bytes)
+	}
+
+	exit(exit: LSPExit): void {
+		this.#emitter.emit('exit', exit)
+	}
+
+	request(method: string): JSONRPCRequest | undefined {
+		for (const message of this.#messages) {
+			if (isJSONRPCRequest(message) && message.method === method) return message
+		}
+		return undefined
+	}
+
+	assertHandshake(): void {
+		const first = this.#messages[0]
+		const next = this.#messages[1]
+		if (
+			first === undefined ||
+			!('method' in first) ||
+			first.method !== LSP_METHODS.initialize ||
+			next === undefined ||
+			!('method' in next) ||
+			next.method !== LSP_METHODS.initialized ||
+			this.#messages.length !== 2
+		)
+			throw new Error('The fixture observed an invalid initialize ordering')
+	}
+}
+
+describe('LSPClient', () => {
+	it('performs initialize then initialized with nothing between', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+
+		await client.start()
+
+		expect(() => transport.assertHandshake()).not.toThrow()
+		const initialize = transport.request(LSP_METHODS.initialize)
+		expect(initialize?.params).toEqual({
+			processId: null,
+			rootUri: 'file:///workspace',
+			capabilities: {
+				general: { positionEncodings: ['utf-16'] },
+				textDocument: {
+					synchronization: {},
+					publishDiagnostics: {},
+					diagnostic: {},
+				},
+			},
+		})
+		await client.destroy()
+	})
+
+	it('negative control: reports initialized before initialize', async () => {
+		const transport = new LSPFixtureTransport()
+
+		await transport.send(
+			encodeLSPMessage({ jsonrpc: '2.0', method: LSP_METHODS.initialized, params: {} }),
+		)
+
+		expect(() => transport.assertHandshake()).toThrow(
+			'The fixture observed an invalid initialize ordering',
+		)
+	})
+
+	it('defaults the negotiated encoding to utf-16', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		expect(client.encoding).toBeUndefined()
+
+		await client.start()
+
+		expect(client.encoding).toBe('utf-16')
+		await client.destroy()
+	})
+
+	it('refuses utf-8 after advertising only utf-16', async () => {
+		const transport = new LSPFixtureTransport({
+			capabilities: { positionEncoding: 'utf-8', textDocumentSync: 1 },
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+
+		await expect(client.start()).rejects.toMatchObject({ code: 'protocol' })
+		expect(client.capabilities).toBeUndefined()
+		expect(client.encoding).toBeUndefined()
+		expect(
+			transport.messages.map((message) => ('method' in message ? message.method : 'response')),
+		).toEqual([LSP_METHODS.initialize])
+		await client.destroy()
+	})
+
+	it('refuses open when synchronization is absent', async () => {
+		const transport = new LSPFixtureTransport({ capabilities: {} })
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open({
+				uri: 'file:///workspace/absent.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			}),
+		).rejects.toMatchObject({ code: 'protocol' })
+		await client.destroy()
+	})
+
+	it('refuses open when synchronization is zero', async () => {
+		const transport = new LSPFixtureTransport({ capabilities: { textDocumentSync: 0 } })
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open({
+				uri: 'file:///workspace/zero.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			}),
+		).rejects.toMatchObject({ code: 'protocol' })
+		await client.destroy()
+	})
+
+	it('accepts numeric synchronization modes', async () => {
+		const synchronizations: readonly LSPTextDocumentSyncKind[] = [1, 2]
+		for (const synchronization of synchronizations) {
+			const uri = `file:///workspace/numeric-${synchronization}.ts`
+			const transport = new LSPFixtureTransport({
+				capabilities: { textDocumentSync: synchronization },
+				handler: (peer, message) => {
+					if ('method' in message && message.method === LSP_METHODS.open)
+						peer.receive({
+							jsonrpc: '2.0',
+							method: LSP_METHODS.publish,
+							params: { uri, diagnostics: [] },
+						})
+				},
+			})
+			const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+			await client.start()
+
+			await expect(
+				client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+			).resolves.toEqual([])
+			await client.destroy()
+		}
+	})
+
+	it('refuses synchronization options without openClose true', async () => {
+		for (const textDocumentSync of [{}, { openClose: false }]) {
+			const transport = new LSPFixtureTransport({ capabilities: { textDocumentSync } })
+			const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+			await client.start()
+
+			await expect(
+				client.open({
+					uri: 'file:///workspace/options.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				}),
+			).rejects.toMatchObject({ code: 'protocol' })
+			await client.destroy()
+		}
+	})
+
+	it('accepts synchronization options with openClose true', async () => {
+		const uri = 'file:///workspace/options-true.ts'
+		const transport = new LSPFixtureTransport({
+			capabilities: { textDocumentSync: { openClose: true } },
+			handler: (peer, message) => {
+				if ('method' in message && message.method === LSP_METHODS.open)
+					peer.receive({
+						jsonrpc: '2.0',
+						method: LSP_METHODS.publish,
+						params: { uri, diagnostics: [] },
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+		).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('resolves push diagnostics including an empty publication', async () => {
+		const uri = 'file:///workspace/push.ts'
+		const transport = new LSPFixtureTransport({
+			handler: (peer, message) => {
+				if ('method' in message && message.method === LSP_METHODS.open)
+					peer.receive({
+						jsonrpc: '2.0',
+						method: LSP_METHODS.publish,
+						params: { uri, diagnostics: [] },
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+		).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('resolves a full pull diagnostic report', async () => {
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+			handler: (peer, message) => {
+				if ('method' in message && 'id' in message && message.method === LSP_METHODS.diagnostic)
+					peer.receive({
+						jsonrpc: '2.0',
+						id: message.id,
+						result: { kind: 'full', resultId: 'result-a', items: [] },
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open({
+				uri: 'file:///workspace/pull.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			}),
+		).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('refuses an unchanged pull report without a prior result id', async () => {
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+			handler: (peer, message) => {
+				if ('method' in message && 'id' in message && message.method === LSP_METHODS.diagnostic)
+					peer.receive({
+						jsonrpc: '2.0',
+						id: message.id,
+						result: { kind: 'unchanged', resultId: 'orphan' },
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open({
+				uri: 'file:///workspace/unchanged.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			}),
+		).rejects.toMatchObject({ code: 'protocol' })
+		await client.destroy()
+	})
+
+	it('emits an unowned URI publication as a notification', async () => {
+		const notifications = createRecorder<[JSONRPCMessage]>()
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: { notification: notifications.handler },
+		})
+		await client.start()
+
+		transport.receive({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.publish,
+			params: { uri: 'file:///workspace/unowned.ts', diagnostics: [] },
+		})
+
+		expect(notifications.count).toBe(1)
+		expect(notifications.calls[0]?.[0]).toMatchObject({ method: LSP_METHODS.publish })
+		await client.destroy()
+	})
+
+	it('refuses a duplicate open URI', async () => {
+		const uri = 'file:///workspace/duplicate.ts'
+		const transport = new LSPFixtureTransport({
+			handler: (peer, message) => {
+				if ('method' in message && message.method === LSP_METHODS.open)
+					peer.receive({
+						jsonrpc: '2.0',
+						method: LSP_METHODS.publish,
+						params: { uri, diagnostics: [] },
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+		await client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+
+		await expect(
+			client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+		).rejects.toMatchObject({ code: 'duplicate' })
+		await client.destroy()
+	})
+
+	it('correlates out-of-order diagnostic responses', async () => {
+		const requests: JSONRPCRequest[] = []
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+			handler: (peer, message) => {
+				if (isJSONRPCRequest(message) && message.method === LSP_METHODS.diagnostic) {
+					requests.push(message)
+					const first = requests[0]
+					const next = requests[1]
+					if (first !== undefined && next !== undefined) {
+						peer.receive({
+							jsonrpc: '2.0',
+							id: next.id,
+							result: { kind: 'full', items: [] },
+						})
+						peer.receive({
+							jsonrpc: '2.0',
+							id: first.id,
+							result: { kind: 'full', items: [] },
+						})
+					}
+				}
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		const first = client.open({
+			uri: 'file:///workspace/first.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+		const next = client.open({
+			uri: 'file:///workspace/next.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+
+		await expect(Promise.all([first, next])).resolves.toEqual([[], []])
+		expect(requests[0]?.id).not.toBe(requests[1]?.id)
+		await client.destroy()
+	})
+
+	it('emits a protocol error for an unknown response id', async () => {
+		const errors = createRecorder<[unknown]>()
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: { error: errors.handler },
+		})
+		await client.start()
+
+		transport.receive({ jsonrpc: '2.0', id: 999, result: null })
+
+		expect(errors.count).toBe(1)
+		expect(errors.calls[0]?.[0]).toMatchObject({ code: 'protocol' })
+		await client.destroy()
+	})
+
+	it('answers an unsupported inbound server request with method not found', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		transport.receive({ jsonrpc: '2.0', id: 'server-a', method: 'workspace/configuration' })
+		await waitForDelay()
+
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			id: 'server-a',
+			error: {
+				code: JSONRPC_METHOD_NOT_FOUND,
+				message: 'Method not found: workspace/configuration',
+			},
+		})
+		await client.destroy()
+	})
+
+	it('times out one request and sends its cancel notification', async () => {
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+			handler: (peer, message) => {
+				if (
+					'method' in message &&
+					'id' in message &&
+					message.method === LSP_METHODS.diagnostic &&
+					message.params?.textDocument !== undefined
+				) {
+					const textDocument = message.params.textDocument
+					if (
+						typeof textDocument === 'object' &&
+						textDocument !== null &&
+						'uri' in textDocument &&
+						textDocument.uri === 'file:///workspace/healthy.ts'
+					)
+						peer.receive({
+							jsonrpc: '2.0',
+							id: message.id,
+							result: { kind: 'full', items: [] },
+						})
+				}
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 20 })
+		await client.start()
+		const stalled = client.open({
+			uri: 'file:///workspace/stalled.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+		const healthy = client.open({
+			uri: 'file:///workspace/healthy.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+
+		await expect(healthy).resolves.toEqual([])
+		await expect(stalled).rejects.toMatchObject({ code: 'timeout' })
+		const diagnostic = transport.request(LSP_METHODS.diagnostic)
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.cancel,
+			params: { id: diagnostic?.id },
+		})
+		await client.destroy()
+	})
+
+	it('aborts every pending request and begins destruction', async () => {
+		const controller = new AbortController()
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+		})
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			timeout: 20,
+			signal: controller.signal,
+		})
+		await client.start()
+		const first = client.open({
+			uri: 'file:///workspace/abort-a.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+		const next = client.open({
+			uri: 'file:///workspace/abort-b.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+
+		controller.abort('stop')
+
+		await expect(first).rejects.toMatchObject({ code: 'aborted' })
+		await expect(next).rejects.toMatchObject({ code: 'aborted' })
+		await client.destroy()
+		expect(transport.closes).toBe(1)
+	})
+
+	it('rejects pending work as closed and re-emits transport exit', async () => {
+		const exits = createRecorder<[LSPExit]>()
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+		})
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: { exit: exits.handler },
+		})
+		await client.start()
+		const pending = client.open({
+			uri: 'file:///workspace/exit.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+		const exit = { code: 1, signal: null }
+
+		transport.exit(exit)
+
+		await expect(pending).rejects.toMatchObject({ code: 'closed' })
+		expect(exits.calls).toEqual([[exit]])
+		await client.destroy()
+	})
+
+	it('drains decoded notifications before surfacing a framing fault', async () => {
+		const events: string[] = []
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: {
+				notification: () => events.push('notification'),
+				error: (error) => events.push(isLSPError(error) ? error.code : 'unknown'),
+			},
+		})
+		await client.start()
+		const notification = encodeLSPMessage({ jsonrpc: '2.0', method: 'window/logMessage' })
+		const malformed = new TextEncoder().encode('Content-Length: x\r\n\r\n')
+		const chunk = new Uint8Array(notification.byteLength + malformed.byteLength)
+		chunk.set(notification)
+		chunk.set(malformed, notification.byteLength)
+
+		transport.receiveBytes(chunk)
+
+		expect(events).toEqual(['notification', 'framing'])
+		await client.destroy()
+	})
+
+	it('preserves a JSON-RPC error response in a server error context', async () => {
+		const wire = { code: -32_001, message: 'Server failed', data: { reason: 'fixture' } }
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+			handler: (peer, message) => {
+				if ('method' in message && 'id' in message && message.method === LSP_METHODS.diagnostic)
+					peer.receive({ jsonrpc: '2.0', id: message.id, error: wire })
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		const result = client.open({
+			uri: 'file:///workspace/server-error.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: '',
+		})
+		await expect(result).rejects.toMatchObject({
+			code: 'server',
+			context: { code: wire.code, value: wire },
+		})
+		await client.destroy()
+	})
+
+	it('sends close before releasing a document URI', async () => {
+		const uri = 'file:///workspace/close.ts'
+		const transport = new LSPFixtureTransport({
+			handler: (peer, message) => {
+				if ('method' in message && message.method === LSP_METHODS.open)
+					peer.receive({
+						jsonrpc: '2.0',
+						method: LSP_METHODS.publish,
+						params: { uri, diagnostics: [] },
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+		await client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+
+		await client.close(uri)
+		await expect(
+			client.open({ uri, languageId: 'typescript', version: 2, text: '' }),
+		).resolves.toEqual([])
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.close,
+			params: { textDocument: { uri } },
+		})
+		await client.destroy()
+	})
+
+	it('destroys in shutdown exit close order', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await client.destroy()
+
+		expect(transport.operations.slice(-3)).toEqual([
+			LSP_METHODS.shutdown,
+			LSP_METHODS.exit,
+			'close',
+		])
+	})
+
+	it('closes after the bounded shutdown fallback', async () => {
+		const transport = new LSPFixtureTransport({ shutdown: false })
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 20 })
+		await client.start()
+
+		await client.destroy()
+
+		expect(transport.operations).toContain(LSP_METHODS.cancel)
+		expect(transport.operations.slice(-2)).toEqual([LSP_METHODS.exit, 'close'])
+	})
+
+	it('makes destroy idempotent', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await Promise.all([client.destroy(), client.destroy(), client.destroy()])
+		await client.destroy()
+
+		expect(transport.closes).toBe(1)
+		expect(
+			transport.messages.filter(
+				(message) => 'method' in message && message.method === LSP_METHODS.shutdown,
+			),
+		).toHaveLength(1)
+	})
+
+	it('starts again after a transport exit', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+		transport.exit({ code: 1, signal: null })
+
+		await client.start()
+
+		expect(transport.starts).toBe(2)
+		await client.destroy()
+	})
+
+	it('brands emitted and rejected failures as LSP errors', async () => {
+		const transport = new LSPFixtureTransport({ capabilities: {} })
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+		let caught: unknown
+
+		try {
+			await client.open({
+				uri: 'file:///workspace/error.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			})
+		} catch (error) {
+			caught = error
+		}
+		expect(isLSPError(caught)).toBe(true)
+		expect(caught).toBeInstanceOf(LSPError)
+		await client.destroy()
+	})
+})
