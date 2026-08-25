@@ -223,13 +223,19 @@ export interface LSPTransportInterface {
 	close(): Promise<void>
 }
 
-/** Describes the lifecycle state that gates client operations and transport generations. */
+/**
+ * Describes the lifecycle state that gates client operations and transport generations.
+ *
+ * @remarks
+ * A `starting` or `ready` state owns the transport generation it identifies. A `destroying` state
+ * carries a generation only when that initialized generation still requires an `exit` write.
+ */
 export type LSPClientLifecycle =
 	| { readonly phase: 'idle' }
-	| { readonly phase: 'starting'; readonly promise: Promise<void> }
-	| { readonly phase: 'ready' }
+	| { readonly phase: 'starting'; readonly promise: Promise<void>; readonly generation: number }
+	| { readonly phase: 'ready'; readonly generation: number }
 	| { readonly phase: 'closed' }
-	| { readonly phase: 'destroying'; readonly promise: Promise<void>; readonly exited: boolean }
+	| { readonly phase: 'destroying'; readonly promise: Promise<void>; readonly generation?: number }
 	| { readonly phase: 'destroyed' }
 
 /** Maps client event names to their listener arguments. */
@@ -257,6 +263,14 @@ export interface LSPClientInterface {
 	start(): Promise<void>
 	open(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]>
 	close(uri: LSPDocumentURI): Promise<void>
+	/**
+	 * Tears down the client within the configured deadline.
+	 *
+	 * @returns A promise that resolves after transport settlement and listener removal.
+	 * @remarks A close failure that settles before the deadline is emitted before the emitter is
+	 * destroyed. At the deadline, the client emits a coded `timeout` error and absorbs the later
+	 * close outcome.
+	 */
 	destroy(): Promise<void>
 }
 

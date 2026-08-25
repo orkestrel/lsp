@@ -5,11 +5,11 @@ import type {
 	JSONRPCNotification,
 	JSONRPCRequest,
 	JSONRPCResponse,
+	LSPClientCapabilities,
 	LSPClientEventMap,
 	LSPClientInterface,
 	LSPClientLifecycle,
 	LSPClientOptions,
-	LSPClientCapabilities,
 	LSPDecodeState,
 	LSPDiagnostic,
 	LSPDocumentDiagnosticParams,
@@ -93,6 +93,7 @@ export class LSPClient implements LSPClientInterface {
 	#state: LSPDecodeState | undefined = undefined
 	#capabilities: LSPServerCapabilities | undefined = undefined
 	#nextId = 0
+	#generation = 0
 	#lifecycle: LSPClientLifecycle = { phase: 'idle' }
 
 	constructor(options: LSPClientOptions) {
@@ -137,8 +138,10 @@ export class LSPClient implements LSPClientInterface {
 		if (this.#lifecycle.phase === 'starting') return this.#lifecycle.promise
 		if (this.#lifecycle.phase === 'destroying' || this.#lifecycle.phase === 'destroyed')
 			return Promise.reject(new LSPError('The LSP client is closed', { code: 'closed' }))
-		const starting = Promise.resolve().then(() => this.#begin())
-		this.#lifecycle = { phase: 'starting', promise: starting }
+		this.#generation += 1
+		const generation = this.#generation
+		const starting = Promise.resolve().then(() => this.#begin(generation))
+		this.#lifecycle = { phase: 'starting', promise: starting, generation }
 		return starting
 	}
 
@@ -193,20 +196,21 @@ export class LSPClient implements LSPClientInterface {
 	destroy(): Promise<void> {
 		if (this.#lifecycle.phase === 'destroying') return this.#lifecycle.promise
 		if (this.#lifecycle.phase === 'destroyed') return Promise.resolve()
-		const exited =
-			this.#lifecycle.phase === 'closed' ||
-			this.#lifecycle.phase === 'idle' ||
-			this.#lifecycle.phase === 'starting'
+		const generation = this.#lifecycle.phase === 'ready' ? this.#lifecycle.generation : undefined
 		const destruction = Promise.resolve().then(() => this.#teardown())
-		this.#lifecycle = { phase: 'destroying', promise: destruction, exited }
+		this.#lifecycle = {
+			phase: 'destroying',
+			promise: destruction,
+			...(generation === undefined ? {} : { generation }),
+		}
 		return destruction
 	}
 
-	async #begin(): Promise<void> {
+	async #begin(generation: number): Promise<void> {
 		try {
 			await this.#transport.start()
 		} catch (cause) {
-			this.#lifecycle = { phase: 'closed' }
+			if (this.#ownsGeneration(generation)) this.#lifecycle = { phase: 'closed' }
 			throw new LSPError('The LSP transport could not start', { code: 'spawn', cause })
 		}
 		try {
@@ -240,14 +244,20 @@ export class LSPClient implements LSPClientInterface {
 					code: 'protocol',
 					context: { value: encoding },
 				})
+			if (!this.#ownsGeneration(generation))
+				throw new LSPError('The LSP transport is closed', { code: 'closed' })
 			await this.#write({ jsonrpc: '2.0', method: LSP_METHODS.initialized, params: {} })
+			if (!this.#ownsGeneration(generation))
+				throw new LSPError('The LSP transport is closed', { code: 'closed' })
 			this.#capabilities = Object.freeze({ ...result.capabilities })
-			this.#lifecycle = { phase: 'ready' }
+			this.#lifecycle = { phase: 'ready', generation }
 		} catch (error) {
-			if (this.#lifecycle.phase !== 'destroying' && this.#lifecycle.phase !== 'destroyed') {
+			if (this.#ownsGeneration(generation)) {
 				await this.#releaseGeneration()
-				this.#clearSession()
-				this.#lifecycle = { phase: 'closed' }
+				if (this.#ownsGeneration(generation)) {
+					this.#clearSession()
+					this.#lifecycle = { phase: 'closed' }
+				}
 			}
 			throw error
 		}
@@ -376,7 +386,9 @@ export class LSPClient implements LSPClientInterface {
 		const permitted =
 			phase === 'ready' ||
 			(phase === 'starting' &&
-				(method === LSP_METHODS.initialize || method === LSP_METHODS.initialized)) ||
+				(method === undefined ||
+					method === LSP_METHODS.initialize ||
+					method === LSP_METHODS.initialized)) ||
 			(phase === 'destroying' && (method === LSP_METHODS.shutdown || method === LSP_METHODS.exit))
 		if (!permitted) throw new LSPError('The LSP transport is closed', { code: 'closed' })
 		try {
@@ -552,14 +564,13 @@ export class LSPClient implements LSPClientInterface {
 
 	#drain(error: LSPError): void {
 		for (const id of [...this.#pending.keys()]) this.#settle(id, error, true)
-		for (const publication of this.#publications.values()) publication.reject(error)
-		this.#publications.clear()
+		for (const uri of [...this.#publications.keys()]) this.#settlePublication(uri, error, true)
 	}
 
 	#receiveExit(exit: LSPExit): void {
 		const lifecycle = this.#lifecycle
 		if (lifecycle.phase === 'destroying')
-			this.#lifecycle = { phase: 'destroying', promise: lifecycle.promise, exited: true }
+			this.#lifecycle = { phase: 'destroying', promise: lifecycle.promise }
 		else if (lifecycle.phase !== 'destroyed') this.#lifecycle = { phase: 'closed' }
 		this.#clearSession()
 		this.#drain(
@@ -586,7 +597,8 @@ export class LSPClient implements LSPClientInterface {
 					await this.#request(LSP_METHODS.shutdown)
 				} catch {}
 			}
-			if (this.#lifecycle.phase === 'destroying' && !this.#lifecycle.exited) await this.#boundExit()
+			if (this.#lifecycle.phase === 'destroying' && this.#lifecycle.generation !== undefined)
+				await this.#boundExit()
 			await this.#closeTransport()
 		} finally {
 			this.#transport.emitter.off('chunk', this.#chunk)
@@ -631,6 +643,13 @@ export class LSPClient implements LSPClientInterface {
 
 	async #releaseGeneration(): Promise<void> {
 		await this.#closeTransport()
+	}
+
+	#ownsGeneration(generation: number): boolean {
+		return (
+			(this.#lifecycle.phase === 'starting' || this.#lifecycle.phase === 'ready') &&
+			this.#lifecycle.generation === generation
+		)
 	}
 
 	#clearSession(): void {

@@ -733,6 +733,34 @@ describe('LSPClient', () => {
 		await client.destroy()
 	})
 
+	it('answers an unsupported inbound server request during initialization', async () => {
+		const transport = new LSPFixtureTransport({ initialize: false })
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		const starting = client.start()
+		await waitForDelay()
+		const initialize = transport.request(LSP_METHODS.initialize)
+		if (initialize === undefined) throw new Error('Expected an initialize request')
+
+		transport.receive({ jsonrpc: '2.0', id: 'server-start', method: 'workspace/configuration' })
+		await waitForDelay()
+
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			id: 'server-start',
+			error: {
+				code: JSONRPC_METHOD_NOT_FOUND,
+				message: 'Method not found: workspace/configuration',
+			},
+		})
+		transport.receive({
+			jsonrpc: '2.0',
+			id: initialize.id,
+			result: { capabilities: { textDocumentSync: 1 } },
+		})
+		await starting
+		await client.destroy()
+	})
+
 	it('times out one request and sends its cancel notification', async () => {
 		const transport = new LSPFixtureTransport({
 			capabilities: {
@@ -1152,6 +1180,74 @@ describe('LSPClient', () => {
 		await client.start()
 
 		expect(transport.starts).toBe(2)
+		await client.destroy()
+	})
+
+	it('completes a restart issued from the exit handler as a second generation', async () => {
+		const transport = new LSPFixtureTransport({ initialize: false })
+		let restart: Promise<void> | undefined
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: {
+				exit: () => {
+					restart = client.start()
+					restart.catch(() => {})
+				},
+			},
+		})
+		const first = client.start()
+		await waitForDelay()
+
+		transport.exit({ code: 1, signal: null })
+
+		await expect(first).rejects.toMatchObject({ code: 'closed' })
+		await waitForDelay()
+		const initialize = transport.messages.filter(
+			(message): message is JSONRPCRequest =>
+				isJSONRPCRequest(message) && message.method === LSP_METHODS.initialize,
+		)[1]
+		if (initialize === undefined) throw new Error('Expected a restarted initialize request')
+		transport.receive({
+			jsonrpc: '2.0',
+			id: initialize.id,
+			result: { capabilities: { textDocumentSync: 1 } },
+		})
+
+		await expect(restart).resolves.toBeUndefined()
+		expect(transport.starts).toBe(2)
+		expect(transport.messages.at(-1)).toMatchObject({ method: LSP_METHODS.initialized })
+		await client.destroy()
+	})
+
+	it('detaches a drained publication deadline before the next generation', async () => {
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			timeout: 400,
+		})
+		await client.start()
+		const uri = 'file:///workspace/generation.ts'
+		const first = client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		first.catch(() => {})
+		await waitForDelay(10)
+
+		transport.exit({ code: 1, signal: null })
+
+		await expect(first).rejects.toMatchObject({ code: 'closed' })
+		await waitForDelay(150)
+		await client.start()
+		const next = client.open({ uri, languageId: 'typescript', version: 2, text: '' })
+		next.catch(() => {})
+		await waitForDelay(310)
+		transport.receive({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.publish,
+			params: { uri, diagnostics: [] },
+		})
+
+		await expect(next).resolves.toEqual([])
 		await client.destroy()
 	})
 

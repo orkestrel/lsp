@@ -3,8 +3,7 @@
 ## By concept
 
 - Package
-  - Spec: Not created. Create this file when the workspace has a public surface:
-    `guides/lsp.md`
+  - Spec: [`guides/lsp.md`](lsp.md)
   - Source:
     - [`src/core`](../src/core)
     - [`src/server`](../src/server)
@@ -15,10 +14,8 @@
 ## By directory
 
 - [`src/core`](../src/core)
-  - Guide: Not created. Create this file when the workspace has a public surface:
-    `guides/lsp.md`
+  - Guide: [`guides/lsp.md`](lsp.md)
   - Tests: [`tests/src/core`](../tests/src/core)
 - [`src/server`](../src/server)
-  - Guide: Not created. Create this file when the workspace has a public surface:
-    `guides/lsp.md`
+  - Guide: [`guides/lsp.md`](lsp.md)
   - Tests: [`tests/src/server`](../tests/src/server)
