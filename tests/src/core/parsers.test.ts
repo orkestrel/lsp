@@ -6,12 +6,9 @@ import {
 	LSP_CONTENT_LIMIT,
 	LSPError,
 	LSP_HEADER_LIMIT,
-	LSP_METHODS,
 	parseLSPMessages,
 } from '@src/core'
 import { describe, expect, it } from 'vitest'
-
-const INITIALIZE_METHOD: 'initialize' = LSP_METHODS.initialize
 
 describe('parseLSPMessages', () => {
 	it('decodes a UTF-8 frame containing an astral code point', () => {
@@ -36,6 +33,32 @@ describe('parseLSPMessages', () => {
 		expect(pending?.size).toBe(11)
 		expect(messages).toEqual([message])
 		expect(remaining).toBeUndefined()
+	})
+
+	it('owns retained chunks across caller mutation', () => {
+		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
+		const frame = encodeLSPMessage(message)
+		const delivered = frame.slice(0, frame.byteLength - 1)
+		const [, state] = parseLSPMessages(delivered)
+		delivered.fill(0)
+
+		const [messages, pending] = parseLSPMessages(frame.slice(frame.byteLength - 1), state)
+
+		expect(messages).toEqual([message])
+		expect(pending).toBeUndefined()
+	})
+
+	it('decodes a header boundary split at every offset', () => {
+		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
+		const frame = encodeLSPMessage(message)
+		const boundary = new TextDecoder().decode(frame).indexOf('\r\n\r\n')
+		for (let offset = 0; offset < 4; offset += 1) {
+			const split = boundary + offset
+			const [, state] = parseLSPMessages(frame.slice(0, split))
+			const [messages, pending] = parseLSPMessages(frame.slice(split), state)
+			expect(messages).toEqual([message])
+			expect(pending).toBeUndefined()
+		}
 	})
 
 	it('separates several frames delivered in one chunk', () => {
@@ -180,6 +203,19 @@ describe('parseLSPMessages', () => {
 		expect(messages).toEqual([message])
 	})
 
+	it('refuses a Content-Type parameter without an equals sign', () => {
+		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
+		const body = new TextEncoder().encode(JSON.stringify(message))
+		const header = new TextEncoder().encode(
+			`Content-Length: ${body.byteLength}\r\nContent-Type: application/vscode-jsonrpc; charset\r\n\r\n`,
+		)
+		const frame = new Uint8Array(header.byteLength + body.byteLength)
+		frame.set(header)
+		frame.set(body, header.byteLength)
+
+		expect(() => parseLSPMessages(frame)).toThrow(LSPError)
+	})
+
 	it('preserves decoded messages when refusing a charset other than UTF-8', () => {
 		const decoded: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
 		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
@@ -265,6 +301,17 @@ describe('parseLSPMessages', () => {
 		expect(thrown.code).toBe('framing')
 	})
 
+	it('retains exact framing limits as pending state', () => {
+		const header = new Uint8Array(LSP_HEADER_LIMIT)
+		header.fill(65)
+		const [, headerState] = parseLSPMessages(header)
+		const content = new TextEncoder().encode(`Content-Length: ${LSP_CONTENT_LIMIT}\r\n\r\n`)
+		const [, contentState] = parseLSPMessages(content)
+
+		expect(headerState?.size).toBe(LSP_HEADER_LIMIT)
+		expect(contentState?.length).toBe(LSP_CONTENT_LIMIT)
+	})
+
 	it('ignores an unknown header field', () => {
 		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
 		const encoder = new TextEncoder()
@@ -278,5 +325,3 @@ describe('parseLSPMessages', () => {
 		expect(messages).toEqual([message])
 	})
 })
-
-void INITIALIZE_METHOD

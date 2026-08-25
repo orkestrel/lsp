@@ -7,11 +7,15 @@ import type {
 	JSONRPCResponse,
 	LSPClientEventMap,
 	LSPClientInterface,
+	LSPClientLifecycle,
 	LSPClientOptions,
+	LSPClientCapabilities,
 	LSPDecodeState,
 	LSPDiagnostic,
+	LSPDocumentDiagnosticParams,
 	LSPDocumentURI,
 	LSPExit,
+	LSPInitializeParams,
 	LSPPositionEncoding,
 	LSPServerCapabilities,
 	LSPTextDocumentItem,
@@ -77,6 +81,8 @@ export class LSPClient implements LSPClientInterface {
 		{
 			readonly resolve: (diagnostics: readonly LSPDiagnostic[]) => void
 			readonly reject: (reason?: unknown) => void
+			readonly deadline: AbortSignal
+			readonly timeout: () => void
 		}
 	>()
 	readonly #documents = new Set<LSPDocumentURI>()
@@ -87,8 +93,7 @@ export class LSPClient implements LSPClientInterface {
 	#state: LSPDecodeState | undefined = undefined
 	#capabilities: LSPServerCapabilities | undefined = undefined
 	#nextId = 0
-	#destroying: Promise<void> | undefined = undefined
-	#destroyed = false
+	#lifecycle: LSPClientLifecycle = { phase: 'idle' }
 
 	constructor(options: LSPClientOptions) {
 		this.#emitter = new Emitter<LSPClientEventMap>({
@@ -127,48 +132,19 @@ export class LSPClient implements LSPClientInterface {
 		)
 	}
 
-	async start(): Promise<void> {
-		if (this.#destroyed || this.#destroying !== undefined)
-			throw new LSPError('The LSP client is closed', { code: 'closed' })
-		if (this.#capabilities !== undefined) return
-		try {
-			await this.#transport.start()
-		} catch (cause) {
-			throw new LSPError('The LSP transport could not start', { code: 'spawn', cause })
-		}
-		if (this.#signal?.aborted === true)
-			throw new LSPError('The LSP client was aborted', {
-				code: 'aborted',
-				cause: this.#signal.reason,
-			})
-		const result = await this.#request(LSP_METHODS.initialize, {
-			processId: null,
-			rootUri: this.#workspace,
-			capabilities: {
-				general: { positionEncodings: ['utf-16'] },
-				textDocument: {
-					synchronization: {},
-					publishDiagnostics: {},
-					diagnostic: {},
-				},
-			},
-		})
-		if (!isLSPInitializeResult(result))
-			throw new LSPError('The LSP server returned an invalid initialize result', {
-				code: 'protocol',
-				context: { value: result },
-			})
-		const encoding = result.capabilities.positionEncoding
-		if (encoding !== undefined && encoding !== 'utf-16')
-			throw new LSPError('The LSP server selected an unsupported position encoding', {
-				code: 'protocol',
-				context: { value: encoding },
-			})
-		await this.#write({ jsonrpc: '2.0', method: LSP_METHODS.initialized, params: {} })
-		this.#capabilities = Object.freeze({ ...result.capabilities })
+	start(): Promise<void> {
+		if (this.#lifecycle.phase === 'ready') return Promise.resolve()
+		if (this.#lifecycle.phase === 'starting') return this.#lifecycle.promise
+		if (this.#lifecycle.phase === 'destroying' || this.#lifecycle.phase === 'destroyed')
+			return Promise.reject(new LSPError('The LSP client is closed', { code: 'closed' }))
+		const starting = Promise.resolve().then(() => this.#begin())
+		this.#lifecycle = { phase: 'starting', promise: starting }
+		return starting
 	}
 
 	async open(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]> {
+		if (this.#lifecycle.phase !== 'ready')
+			throw new LSPError('The LSP client is closed', { code: 'closed' })
 		if (this.#documents.has(document.uri))
 			throw new LSPError('The document URI is already open', {
 				code: 'duplicate',
@@ -191,31 +167,90 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	async close(uri: LSPDocumentURI): Promise<void> {
+		if (this.#lifecycle.phase !== 'ready')
+			throw new LSPError('The LSP client is closed', { code: 'closed' })
+		if (!this.#documents.has(uri))
+			throw new LSPError('The document URI is not open', {
+				code: 'protocol',
+				context: { value: uri },
+			})
 		await this.#write({
 			jsonrpc: '2.0',
 			method: LSP_METHODS.close,
 			params: { textDocument: { uri } },
 		})
 		this.#documents.delete(uri)
-		const publication = this.#publications.get(uri)
-		if (publication !== undefined) {
-			this.#publications.delete(uri)
-			publication.reject(
-				new LSPError('The document was closed before diagnostics arrived', {
-					code: 'closed',
-					context: { value: uri },
-				}),
-			)
-		}
+		this.#settlePublication(
+			uri,
+			new LSPError('The document was closed before diagnostics arrived', {
+				code: 'closed',
+				context: { value: uri },
+			}),
+			true,
+		)
 	}
 
 	destroy(): Promise<void> {
-		const destroying = this.#destroying
-		if (destroying !== undefined) return destroying
-		if (this.#destroyed) return Promise.resolve()
+		if (this.#lifecycle.phase === 'destroying') return this.#lifecycle.promise
+		if (this.#lifecycle.phase === 'destroyed') return Promise.resolve()
+		const exited =
+			this.#lifecycle.phase === 'closed' ||
+			this.#lifecycle.phase === 'idle' ||
+			this.#lifecycle.phase === 'starting'
 		const destruction = Promise.resolve().then(() => this.#teardown())
-		this.#destroying = destruction
+		this.#lifecycle = { phase: 'destroying', promise: destruction, exited }
 		return destruction
+	}
+
+	async #begin(): Promise<void> {
+		try {
+			await this.#transport.start()
+		} catch (cause) {
+			this.#lifecycle = { phase: 'closed' }
+			throw new LSPError('The LSP transport could not start', { code: 'spawn', cause })
+		}
+		try {
+			if (this.#signal?.aborted === true)
+				throw new LSPError('The LSP client was aborted', {
+					code: 'aborted',
+					cause: this.#signal.reason,
+				})
+			const capabilities = {
+				general: { positionEncodings: ['utf-16'] },
+				textDocument: {
+					synchronization: {},
+					publishDiagnostics: {},
+					diagnostic: {},
+				},
+			} satisfies LSPClientCapabilities
+			const params = {
+				processId: null,
+				rootUri: this.#workspace,
+				capabilities,
+			} satisfies LSPInitializeParams
+			const result = await this.#request(LSP_METHODS.initialize, params)
+			if (!isLSPInitializeResult(result))
+				throw new LSPError('The LSP server returned an invalid initialize result', {
+					code: 'protocol',
+					context: { value: result },
+				})
+			const encoding = result.capabilities.positionEncoding
+			if (encoding !== undefined && encoding !== 'utf-16')
+				throw new LSPError('The LSP server selected an unsupported position encoding', {
+					code: 'protocol',
+					context: { value: encoding },
+				})
+			await this.#write({ jsonrpc: '2.0', method: LSP_METHODS.initialized, params: {} })
+			this.#capabilities = Object.freeze({ ...result.capabilities })
+			this.#lifecycle = { phase: 'ready' }
+		} catch (error) {
+			if (this.#lifecycle.phase !== 'destroying' && this.#lifecycle.phase !== 'destroyed') {
+				await this.#releaseGeneration()
+				this.#clearSession()
+				this.#lifecycle = { phase: 'closed' }
+			}
+			throw error
+		}
 	}
 
 	async #openPull(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]> {
@@ -237,13 +272,14 @@ export class LSPClient implements LSPClientInterface {
 		if (this.#capabilities === undefined)
 			throw new LSPError('The LSP transport is closed', { code: 'closed' })
 		const previous = this.#diagnostics.get(document.uri)
-		const result = await this.#request(LSP_METHODS.diagnostic, {
+		const params = {
 			textDocument: { uri: document.uri },
 			...(this.#capabilities?.diagnosticProvider?.identifier === undefined
 				? {}
 				: { identifier: this.#capabilities.diagnosticProvider.identifier }),
 			...(previous === undefined ? {} : { previousResultId: previous.resultId }),
-		})
+		} satisfies LSPDocumentDiagnosticParams
+		const result = await this.#request(LSP_METHODS.diagnostic, params)
 		if (!isLSPDocumentDiagnosticReport(result))
 			throw new LSPError('The LSP server returned an invalid diagnostic report', {
 				code: 'protocol',
@@ -264,12 +300,16 @@ export class LSPClient implements LSPClientInterface {
 		const diagnostics = Object.freeze([...result.items])
 		if (result.resultId !== undefined)
 			this.#diagnostics.set(document.uri, { resultId: result.resultId, diagnostics })
+		else this.#diagnostics.delete(document.uri)
 		return diagnostics
 	}
 
 	async #openPush(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]> {
 		const publication = Promise.withResolvers<readonly LSPDiagnostic[]>()
-		this.#publications.set(document.uri, publication)
+		const deadline = AbortSignal.timeout(this.#timeout)
+		const timeout = this.#timeoutPublication.bind(this, document.uri)
+		deadline.addEventListener('abort', timeout, { once: true })
+		this.#publications.set(document.uri, { ...publication, deadline, timeout })
 		try {
 			await this.#write({
 				jsonrpc: '2.0',
@@ -277,9 +317,8 @@ export class LSPClient implements LSPClientInterface {
 				params: { textDocument: document },
 			})
 		} catch (error) {
-			this.#publications.delete(document.uri)
+			this.#settlePublication(document.uri, error, true)
 			this.#documents.delete(document.uri)
-			publication.reject(error)
 		}
 		return publication.promise
 	}
@@ -298,7 +337,7 @@ export class LSPClient implements LSPClientInterface {
 			const timeout = this.#timeoutRequest.bind(this, id, method)
 			deadline.addEventListener('abort', timeout, { once: true })
 			this.#pending.set(id, { resolve, reject, method, deadline, timeout })
-			this.#transport.send(encodeLSPMessage(request)).then(
+			this.#send(request).then(
 				(written) => {
 					if (!written)
 						this.#settle(
@@ -324,19 +363,27 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	async #write(notification: JSONRPCNotification): Promise<void> {
-		let written: boolean
-		try {
-			written = await this.#transport.send(encodeLSPMessage(notification))
-		} catch (cause) {
-			throw new LSPError(`The LSP notification '${notification.method}' could not be written`, {
-				code: 'closed',
-				cause,
-			})
-		}
+		const written = await this.#send(notification)
 		if (!written)
 			throw new LSPError(`The LSP notification '${notification.method}' could not be written`, {
 				code: 'closed',
 			})
+	}
+
+	async #send(message: JSONRPCMessage): Promise<boolean> {
+		const method = 'method' in message ? message.method : undefined
+		const phase = this.#lifecycle.phase
+		const permitted =
+			phase === 'ready' ||
+			(phase === 'starting' &&
+				(method === LSP_METHODS.initialize || method === LSP_METHODS.initialized)) ||
+			(phase === 'destroying' && (method === LSP_METHODS.shutdown || method === LSP_METHODS.exit))
+		if (!permitted) throw new LSPError('The LSP transport is closed', { code: 'closed' })
+		try {
+			return await this.#transport.send(encodeLSPMessage(message))
+		} catch (cause) {
+			throw new LSPError('The LSP message could not be written', { code: 'closed', cause })
+		}
 	}
 
 	#receiveChunk(chunk: Uint8Array): void {
@@ -375,7 +422,19 @@ export class LSPClient implements LSPClientInterface {
 
 	#receiveResponse(response: JSONRPCResponse): void {
 		const id = response.id
-		const pending = id === null ? undefined : this.#pending.get(id)
+		if (id === null) {
+			const error = response.error
+			if (error === undefined) return
+			this.#emitter.emit(
+				'error',
+				new LSPError('The LSP server reported an uncorrelated error', {
+					code: 'server',
+					context: { code: error.code, value: error },
+				}),
+			)
+			return
+		}
+		const pending = this.#pending.get(id)
 		if (pending === undefined) {
 			this.#emitter.emit(
 				'error',
@@ -387,7 +446,6 @@ export class LSPClient implements LSPClientInterface {
 			return
 		}
 		if ('error' in response) {
-			if (id === null) return
 			this.#settle(
 				id,
 				new LSPError(`The LSP server rejected '${pending.method}'`, {
@@ -398,7 +456,6 @@ export class LSPClient implements LSPClientInterface {
 			)
 			return
 		}
-		if (id === null) return
 		this.#settle(id, response.result, false)
 	}
 
@@ -422,34 +479,33 @@ export class LSPClient implements LSPClientInterface {
 			this.#emitter.emit('notification', notification)
 			return
 		}
-		this.#publications.delete(notification.params.uri)
-		publication.resolve(Object.freeze([...notification.params.diagnostics]))
+		this.#settlePublication(
+			notification.params.uri,
+			Object.freeze([...notification.params.diagnostics]),
+			false,
+		)
 	}
 
 	#respondUnsupported(request: JSONRPCRequest): void {
-		this.#transport
-			.send(
-				encodeLSPMessage({
-					jsonrpc: '2.0',
-					id: request.id,
-					error: {
-						code: JSONRPC_METHOD_NOT_FOUND,
-						message: `Method not found: ${request.method}`,
-					},
-				}),
-			)
-			.then(
-				(written) => {
-					if (!written)
-						this.#emitter.emit(
-							'error',
-							new LSPError('The unsupported request response could not be written', {
-								code: 'closed',
-							}),
-						)
-				},
-				(error: unknown) => this.#emitter.emit('error', error),
-			)
+		this.#send({
+			jsonrpc: '2.0',
+			id: request.id,
+			error: {
+				code: JSONRPC_METHOD_NOT_FOUND,
+				message: `Method not found: ${request.method}`,
+			},
+		}).then(
+			(written) => {
+				if (!written)
+					this.#emitter.emit(
+						'error',
+						new LSPError('The unsupported request response could not be written', {
+							code: 'closed',
+						}),
+					)
+			},
+			(error: unknown) => this.#emitter.emit('error', error),
+		)
 	}
 
 	#timeoutRequest(id: JSONRPCId, method: string): void {
@@ -458,15 +514,30 @@ export class LSPClient implements LSPClientInterface {
 			context: { value: id },
 		})
 		if (!this.#settle(id, timeout, true)) return
-		this.#transport
-			.send(
-				encodeLSPMessage({
-					jsonrpc: '2.0',
-					method: LSP_METHODS.cancel,
-					params: { id },
-				}),
-			)
-			.catch((error: unknown) => this.#emitter.emit('error', error))
+		if (this.#lifecycle.phase !== 'ready') return
+		this.#send({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.cancel,
+			params: { id },
+		}).catch((error: unknown) => this.#emitter.emit('error', error))
+	}
+
+	#timeoutPublication(uri: LSPDocumentURI): void {
+		const timeout = new LSPError('The LSP diagnostic publication exceeded its deadline', {
+			code: 'timeout',
+			context: { value: uri },
+		})
+		if (this.#settlePublication(uri, timeout, true)) this.#documents.delete(uri)
+	}
+
+	#settlePublication(uri: LSPDocumentURI, value: unknown, failed: boolean): boolean {
+		const publication = this.#publications.get(uri)
+		if (publication === undefined) return false
+		this.#publications.delete(uri)
+		publication.deadline.removeEventListener('abort', publication.timeout)
+		if (failed) publication.reject(value)
+		else if (Array.isArray(value)) publication.resolve(Object.freeze([...value]))
+		return true
 	}
 
 	#settle(id: JSONRPCId, value: unknown, failed: boolean): boolean {
@@ -486,9 +557,11 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	#receiveExit(exit: LSPExit): void {
-		this.#state = undefined
-		this.#capabilities = undefined
-		this.#documents.clear()
+		const lifecycle = this.#lifecycle
+		if (lifecycle.phase === 'destroying')
+			this.#lifecycle = { phase: 'destroying', promise: lifecycle.promise, exited: true }
+		else if (lifecycle.phase !== 'destroyed') this.#lifecycle = { phase: 'closed' }
+		this.#clearSession()
 		this.#drain(
 			new LSPError('The LSP transport exited', { code: 'closed', context: { value: exit } }),
 		)
@@ -506,31 +579,64 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	async #teardown(): Promise<void> {
-		this.#drain(new LSPError('The LSP client is closing', { code: 'closed' }))
-		if (this.#capabilities !== undefined) {
-			try {
-				await this.#request(LSP_METHODS.shutdown)
-			} catch {}
-		}
 		try {
-			await this.#write({ jsonrpc: '2.0', method: LSP_METHODS.exit })
-		} catch {}
-		const closing = this.#transport.close()
+			this.#drain(new LSPError('The LSP client is closing', { code: 'closed' }))
+			if (this.#capabilities !== undefined) {
+				try {
+					await this.#request(LSP_METHODS.shutdown)
+				} catch {}
+			}
+			if (this.#lifecycle.phase === 'destroying' && !this.#lifecycle.exited) await this.#boundExit()
+			await this.#closeTransport()
+		} finally {
+			this.#transport.emitter.off('chunk', this.#chunk)
+			this.#transport.emitter.off('exit', this.#exit)
+			this.#transport.emitter.off('error', this.#error)
+			if (this.#abort !== undefined) this.#signal?.removeEventListener('abort', this.#abort)
+			this.#clearSession()
+			this.#lifecycle = { phase: 'destroyed' }
+			this.#emitter.destroy()
+		}
+	}
+
+	async #boundExit(): Promise<void> {
 		const deadline = AbortSignal.timeout(this.#timeout)
 		await Promise.race([
-			closing.catch((error: unknown) => this.#emitter.emit('error', error)),
+			this.#write({ jsonrpc: '2.0', method: LSP_METHODS.exit }).catch(() => undefined),
 			new Promise<void>((resolve) =>
 				deadline.addEventListener('abort', () => resolve(), { once: true }),
 			),
 		])
-		this.#transport.emitter.off('chunk', this.#chunk)
-		this.#transport.emitter.off('exit', this.#exit)
-		this.#transport.emitter.off('error', this.#error)
-		if (this.#abort !== undefined) this.#signal?.removeEventListener('abort', this.#abort)
+	}
+
+	async #closeTransport(): Promise<void> {
+		const closing = Promise.resolve().then(() => this.#transport.close())
+		const deadline = AbortSignal.timeout(this.#timeout)
+		const outcome = await Promise.race<unknown>([
+			closing.then(
+				() => false,
+				(error: unknown) => error,
+			),
+			new Promise<true>((resolve) =>
+				deadline.addEventListener('abort', () => resolve(true), { once: true }),
+			),
+		])
+		if (outcome === true)
+			this.#emitter.emit(
+				'error',
+				new LSPError('The LSP transport close exceeded its deadline', { code: 'timeout' }),
+			)
+		else if (outcome !== false) this.#emitter.emit('error', outcome)
+	}
+
+	async #releaseGeneration(): Promise<void> {
+		await this.#closeTransport()
+	}
+
+	#clearSession(): void {
 		this.#state = undefined
 		this.#capabilities = undefined
 		this.#documents.clear()
-		this.#destroyed = true
-		this.#emitter.destroy()
+		this.#diagnostics.clear()
 	}
 }

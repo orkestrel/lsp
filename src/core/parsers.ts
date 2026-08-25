@@ -37,12 +37,12 @@ export function parseLSPMessages(
 	const messages: JSONRPCMessage[] = []
 	let pending: LSPDecodeState | undefined
 	if (chunk.byteLength === 0) pending = state
-	else if (state === undefined) pending = { bytes: chunk, size: chunk.byteLength }
+	else if (state === undefined) pending = { bytes: chunk.slice(), size: chunk.byteLength }
 	else if (state.boundary === undefined)
-		pending = { bytes: chunk, previous: state, size: state.size + chunk.byteLength }
+		pending = { bytes: chunk.slice(), previous: state, size: state.size + chunk.byteLength }
 	else
 		pending = {
-			bytes: chunk,
+			bytes: chunk.slice(),
 			previous: state,
 			size: state.size + chunk.byteLength,
 			boundary: state.boundary,
@@ -186,7 +186,11 @@ export function parseLSPMessages(
 						const part = parts[partIndex]
 						if (part === undefined) continue
 						const equals = part.indexOf('=')
-						if (equals < 0) continue
+						if (equals < 0)
+							throw new LSPError('The LSP Content-Type parameter is malformed', {
+								code: 'framing',
+								context: { messages: Object.freeze([...messages]) },
+							})
 						const parameter = part.slice(0, equals).trim().toLowerCase()
 						if (parameter !== 'charset') continue
 						if (charset)
@@ -273,7 +277,7 @@ export function parseLSPMessages(
 
 		if (frameEnd === joined.byteLength) pending = undefined
 		else {
-			const bytes = joined.subarray(frameEnd)
+			const bytes = joined.slice(frameEnd)
 			pending = { bytes, size: bytes.byteLength }
 		}
 	}

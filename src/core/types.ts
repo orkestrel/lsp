@@ -48,11 +48,6 @@ export type JSONRPCResponse = JSONRPCResultResponse | JSONRPCErrorResponse
 /** Describes one complete JSON-RPC 2.0 wire message. */
 export type JSONRPCMessage = JSONRPCRequest | JSONRPCNotification | JSONRPCResponse
 
-/** Describes a validated Language Server Protocol base-protocol header. */
-export interface LSPHeader {
-	readonly length: number
-}
-
 /** Identifies a document by its Language Server Protocol URI. */
 export type LSPDocumentURI = string
 
@@ -213,13 +208,29 @@ export type LSPTransportEventMap = {
 	readonly error: readonly [error: unknown]
 }
 
-/** Defines the byte transport required by an LSP client. */
+/**
+ * Defines the byte transport required by an LSP client.
+ *
+ * @remarks
+ * The `send` and `close` methods must reject rather than throw. After `close` resolves, `send`
+ * must resolve `false`. The client may call `start` again only after `close` resolves or the
+ * transport emits `exit`; an implementation that cannot reconnect must reject that call.
+ */
 export interface LSPTransportInterface {
 	readonly emitter: EmitterInterface<LSPTransportEventMap>
 	start(): Promise<void>
 	send(bytes: Uint8Array): Promise<boolean>
 	close(): Promise<void>
 }
+
+/** Describes the lifecycle state that gates client operations and transport generations. */
+export type LSPClientLifecycle =
+	| { readonly phase: 'idle' }
+	| { readonly phase: 'starting'; readonly promise: Promise<void> }
+	| { readonly phase: 'ready' }
+	| { readonly phase: 'closed' }
+	| { readonly phase: 'destroying'; readonly promise: Promise<void>; readonly exited: boolean }
+	| { readonly phase: 'destroyed' }
 
 /** Maps client event names to their listener arguments. */
 export type LSPClientEventMap = {
