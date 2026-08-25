@@ -214,6 +214,8 @@ export class LSPClient implements LSPClientInterface {
 			throw new LSPError('The LSP transport could not start', { code: 'spawn', cause })
 		}
 		try {
+			if (!this.#ownsGeneration(generation))
+				throw new LSPError('The LSP transport is closed', { code: 'closed' })
 			if (this.#signal?.aborted === true)
 				throw new LSPError('The LSP client was aborted', {
 					code: 'aborted',

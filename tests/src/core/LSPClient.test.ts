@@ -1104,30 +1104,43 @@ describe('LSPClient', () => {
 
 	it('surfaces a transport close rejection before destroying the emitter', async () => {
 		const destroyed: boolean[] = []
+		const codes: Array<string | undefined> = []
 		const transport = new LSPFixtureTransport({ close: 'reject' })
 		let client: LSPClient | undefined = undefined
 		client = new LSPClient({
 			transport,
 			workspace: 'file:///workspace',
-			on: { error: () => destroyed.push(client?.emitter.destroyed ?? true) },
+			on: {
+				error: (error) => {
+					codes.push(isLSPError(error) ? error.code : undefined)
+					destroyed.push(client?.emitter.destroyed ?? true)
+				},
+			},
 		})
 		await client.start()
 
 		await client.destroy()
 
 		expect(destroyed).toEqual([false])
+		expect(codes).toEqual([undefined])
 		expect(client.emitter.destroyed).toBe(true)
 	})
 
-	it('surfaces a delayed close failure before destroying the emitter', async () => {
+	it('emits a close deadline error before destroying the emitter', async () => {
 		const destroyed: boolean[] = []
+		const codes: Array<string | undefined> = []
 		const transport = new LSPFixtureTransport({ close: 'delay' })
 		let client: LSPClient | undefined = undefined
 		client = new LSPClient({
 			transport,
 			workspace: 'file:///workspace',
 			timeout: 10,
-			on: { error: () => destroyed.push(client?.emitter.destroyed ?? true) },
+			on: {
+				error: (error) => {
+					codes.push(isLSPError(error) ? error.code : undefined)
+					destroyed.push(client?.emitter.destroyed ?? true)
+				},
+			},
 		})
 		await client.start()
 
@@ -1135,6 +1148,7 @@ describe('LSPClient', () => {
 		await waitForDelay(50)
 
 		expect(destroyed).toEqual([false])
+		expect(codes).toEqual(['timeout'])
 		expect(client.emitter.destroyed).toBe(true)
 	})
 
