@@ -29,6 +29,7 @@ class LSPFixtureTransport implements LSPTransportInterface {
 	readonly #capabilities: LSPServerCapabilities
 	readonly #shutdown: boolean
 	readonly #initialize: boolean
+	readonly #defer: boolean
 	readonly #send:
 		| { readonly method: string; readonly fault: 'throw' | 'false' | 'hang' }
 		| undefined
@@ -37,6 +38,7 @@ class LSPFixtureTransport implements LSPTransportInterface {
 		| ((peer: LSPFixtureTransport, message: JSONRPCMessage) => Promise<void> | void)
 		| undefined
 	#state: LSPDecodeState | undefined = undefined
+	readonly #releases: Array<() => void> = []
 	#starts = 0
 	#closes = 0
 
@@ -44,6 +46,7 @@ class LSPFixtureTransport implements LSPTransportInterface {
 		readonly capabilities?: LSPServerCapabilities
 		readonly shutdown?: boolean
 		readonly initialize?: boolean
+		readonly defer?: boolean
 		readonly send?: { readonly method: string; readonly fault: 'throw' | 'false' | 'hang' }
 		readonly close?: 'throw' | 'reject' | 'delay'
 		readonly handler?: (peer: LSPFixtureTransport, message: JSONRPCMessage) => Promise<void> | void
@@ -51,6 +54,7 @@ class LSPFixtureTransport implements LSPTransportInterface {
 		this.#capabilities = options?.capabilities ?? { textDocumentSync: 1 }
 		this.#shutdown = options?.shutdown ?? true
 		this.#initialize = options?.initialize ?? true
+		this.#defer = options?.defer ?? false
 		this.#send = options?.send
 		this.#close = options?.close
 		this.#handler = options?.handler
@@ -79,6 +83,11 @@ class LSPFixtureTransport implements LSPTransportInterface {
 	async start(): Promise<void> {
 		this.#starts += 1
 		this.#operations.push('start')
+		if (this.#defer) await new Promise<void>((resolve) => this.#releases.push(resolve))
+	}
+
+	release(): void {
+		for (const release of this.#releases.splice(0)) release()
 	}
 
 	send(bytes: Uint8Array): Promise<boolean> {
@@ -1217,6 +1226,38 @@ describe('LSPClient', () => {
 		await expect(restart).resolves.toBeUndefined()
 		expect(transport.starts).toBe(2)
 		expect(transport.messages.at(-1)).toMatchObject({ method: LSP_METHODS.initialized })
+		await client.destroy()
+	})
+
+	it('does not initialize a superseded transport generation', async () => {
+		const transport = new LSPFixtureTransport({ defer: true })
+		let restart: Promise<void> | undefined
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: {
+				exit: () => {
+					restart = client.start()
+					restart.catch(() => {})
+				},
+			},
+		})
+		const first = client.start()
+		first.catch(() => {})
+		await waitForDelay()
+
+		transport.exit({ code: 1, signal: null })
+		await waitForDelay()
+		expect(transport.starts).toBe(2)
+		transport.release()
+
+		await expect(first).rejects.toMatchObject({ code: 'closed' })
+		await expect(restart).resolves.toBeUndefined()
+		expect(
+			transport.messages.filter(
+				(message) => isJSONRPCRequest(message) && message.method === LSP_METHODS.initialize,
+			),
+		).toHaveLength(1)
 		await client.destroy()
 	})
 
