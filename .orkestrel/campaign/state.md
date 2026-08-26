@@ -28,12 +28,12 @@ known open unit, not a regression to diagnose.
 | Repository | Branch | Head | Standing |
 |---|---|---|---|
 | `orkestrel/lsp` | `main` | `3b8f019` and later | The campaign's subject and its record. L2 through L6 accepted; the campaign archive lives here under `.orkestrel/`. |
-| `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `42e0b1e` | P round accepted and pushed. **P2 held uncommitted on top:** the `Issue.range` adoption returned by the Sol bench with red-first proofs across the producers and the renderer; the Sol `analyst` audit launches next, and the P2 commit follows its verdict behind the green chain. |
+| `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `42e0b1e` | P round accepted and pushed. **P2 held uncommitted on top:** the `Issue.range` adoption with red-first proofs across the producers and the renderer. The objective audit lane is IN FLIGHT on Opus 5, substituted for the dark Sol model per § Bench and lane discipline; the P2 commit follows its verdict behind the green chain. Brief: `lsp/tmp/units/p2-audit-2-brief.md`, superseding the never-delivered bench brief. |
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
 | `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `c51d7ce` | Accepted and pushed. The vendored lint exclusion for the campaign archive and the bench write-root rule in the host inventory's orchestration contract, with the inventory digests regenerated. A release bump is registered for that moved vendored surface; every target re-pins and runs `repair` after it publishes. |
-| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `bef9f40` | **CHECKPOINTED, mid-round.** The era sweep, the contract surface, the mirror with its `m4-mirror.1` closure, and the `m4-stream` delivery wiring (the tasks matcher branch, the defaulted `tasks` filter parameter, the authorize-and-omit acknowledgement; host-verified `310 passed`) are committed and pushed. The guides parity red row stands by design for `m4-guide`. `m4-proof` is in flight, Opus native. See the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `e4c434c` | **CHECKPOINTED, fix round running.** `h2.1-derive` accepted; the `h2.2-prose` corrections and the `h2.2.1-prose` successor (closing every finding its Sol audit broke) are committed and pushed with scoped gates green (`592 passed`, guides `18 passed`). `h2.3-fences` runs next; its Sol `analyst` round also audits the `h2.2.1` corrections. See the H2 section. |
+| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `0fe1879` | **CHECKPOINTED, mid-round.** Everything through `m4-stream` plus the `m4-proof` invariants (the W03-B rows, mutation-bound, Orchestrator-verified `596 passed (596)`) is committed and pushed. The guides parity red row stands by design for `m4-guide`, which runs next. See the M4 section. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `e5876ff` | **CHECKPOINTED, fix round running.** Through `h2.3-fences`: every § Source provenance fence reading executes as a named row, Orchestrator-verified `599 passed (599)`, committed and pushed. The round's objective audit (also covering the `h2.2.1` corrections) runs next on the substituted Opus lane, then `h2.4-mechanical` and `h2.5-gates`. See the H2 section. |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | G1 commits | **G1 ACCEPTED.** Each guide records why its package stays untouched by the progress work, landed by parallel `builder` units, ruled PASS on every claim by the `checker` (`campaign/g1-check-verdict.md`), committed and pushed. |
 
 ## Wave status
@@ -42,9 +42,9 @@ known open unit, not a regression to diagnose.
 |---|---|---|
 | W — workflow | Progress adopted in the mcp shape, `unit` removed | Accepted and pushed |
 | L — lsp | The package: contract, codec, client, transport, conformance, the open-bound split | L2 through L5 accepted through `c1f5cea`; L6 landed as one commit `231eb37` behind its audit round, the L6.1 fix, a PASS re-check, and a green chain (conformance 243). The package is green on `main`. |
-| P — probe | Adopts `@orkestrel/lsp` | P1 closed at `42e0b1e`. **P2 (`Issue.range`) returned and held uncommitted**, red-first across the producers and the renderer; its Sol `analyst` audit launches next and the commit follows the verdict. P3 (`@typescript/native-preview`) stays deferred pending the user's install approval. |
-| H — html and markdown | Provenance | html accepted through `a533947`. markdown's fix round is through `h2.2.1-prose` (checkpointed at `e4c434c`); `h2.3-fences` is in flight, then `h2.4-mechanical` and `h2.5-gates`. |
-| M — mcp | Era 2026-07-28 native, repairs, subscriptions, the tasks family | M3 accepted through `b50520a`. M4 is through `m4-stream` (checkpointed at `bef9f40`); `m4-proof` is in flight, then `m4-guide`, `m4-gates`, and the round audit. M5 (deprecated surface) and M6 (naming cascade, needs the user's blessing) follow. |
+| P — probe | Adopts `@orkestrel/lsp` | P1 closed at `42e0b1e`. **P2 (`Issue.range`) held uncommitted with its objective audit in flight** on the substituted Opus lane; the commit follows the verdict. P3 (`@typescript/native-preview`) stays deferred pending the user's install approval. |
+| H — html and markdown | Provenance | html accepted through `a533947`. markdown's fix round is through `h2.3-fences` (checkpointed at `e5876ff`); the round's objective audit runs next on the substituted Opus lane, then `h2.4-mechanical` and `h2.5-gates`. |
+| M — mcp | Era 2026-07-28 native, repairs, subscriptions, the tasks family | M3 accepted through `b50520a`. M4 is through `m4-proof` (checkpointed at `0fe1879`); `m4-guide` runs next, then `m4-gates` and the round audit. M5 (deprecated surface) and M6 (naming cascade, needs the user's blessing) follow. |
 
 ## M4 — the mcp tasks wave, held and mid-implementation
 
@@ -74,13 +74,13 @@ Unit progress, serial:
 | `m4-mirror` | **Checkpointed at `2b823f9` with a deviation.** The mirror is vendored byte-identical with the digest pinned, the row arrays and drift helper landed, and the outside-membership control ran red and was removed. The unit stopped on its contract: the published scaffold 0.0.53 `prettierignore` lacks the `tests/mirrors/` exclusion, and one row (`TaskStatusNotificationParams metadata`) disagrees with the schema's `$defs` nesting. Record: `mcp/m4-mirror-brief.md`, `-deviation.md`, `-conformance-red.txt`. |
 | `m4-mirror.1` | **Landed at `bc54b38`.** The successor (Sol bench, session `01a03ddc-8d82-7592-82ac-06cb6c56562f`) appended the inventory-identical ignore block and corrected the metadata row against the schema's actual fragment; the schema authority did not drift. The bench sandbox denied the conformance fixture's listener, so the Orchestrator took the acceptance on the host: `format:check` exit 0, the pinned digest unchanged, conformance `42 passed (42)` exit 0. Record: `mcp/m4-mirror.1-brief.md`, `-report.md`. The round audit still runs after `m4-gates`. |
 | `m4-stream` | **Landed at `bef9f40`** (Sol bench, session `01a03df5-28a3-7130-b4d1-88a85e1f8f78`). The `isMCPTaskNotification`-guarded matcher branch, the defaulted `tasks` parameter, the derived support fact, and the authorize-and-omit acknowledgement resolving each requested identifier through `task.tasks.task(id, options)` with order and duplicates preserved. Bench and host both read `310 passed` on the scoped suites. Record: `mcp/m4-stream-brief.md`, `-report.md`. |
-| `m4-proof` | **In flight, Opus native.** The question-2 invariants (byte-identical omission, no delivery-time manager read with a positive-control counter, agreed-set filtering, order preservation) plus the end-to-end fixture producer through `subscription.listen` reaching a real `MCPClient`, with mutation binding against the two landed load-bearing sites. Brief: `lsp/tmp/units/m4-proof-brief.md`. |
-| `m4-guide` | Queued, Opus native. `guides/mcp.md` — the era sweep's guide half, the entitlement ruling, the delivery guarantee, the composing-envelope conformance gap. |
+| `m4-proof` | **Landed at `0fe1879`.** Every question-2 invariant pinned by a named mutation-bound row: byte-identical omission, no delivery-time manager read with a positive-control counter, agreed-set filtering, order and duplicates, the omitted `taskIds` member, and the end-to-end fixture producer through `subscription.listen` reaching a real `MCPClient` with the `io.modelcontextprotocol/subscriptionId` stamp. Orchestrator-verified: scoped suite `596 passed (596)` exit 0, `git diff -- src/` empty. Record: `mcp/m4-proof-brief.md`, `-report.md`. |
+| `m4-guide` | **Next.** Opus native. `guides/mcp.md` — the six undocumented barrel symbols closing the guides red row, the era sweep's guide half, the entitlement ruling, the delivery guarantee, the composing-envelope conformance gap. |
 | `m4-gates` | Queued, `verifier`. |
 
 The audit routing for the round: `reviewer` (Opus) over the Sol-written `m4-mirror` and
-`m4-stream`, `analyst` (Sol) over the Opus-written units, `checker` over mirror membership and
-era-sweep completeness.
+`m4-stream`, the objective lane over the Opus-written units on the substituted Opus engine per
+§ Bench and lane discipline, `checker` over mirror membership and era-sweep completeness.
 
 **The checkpoint's one red row.** `npm run test:guides` reports `documents every barrel export`
 failing with the six symbols `m4-contract` added: the types `MCPNotificationMetaObject`,
@@ -125,11 +125,21 @@ session. Its rulings in brief:
 | `h2.1-derive` | `sol` — Sol bench | **ACCEPTED.** The Opus `reviewer` audit returned `PASS — 6 of 6 confirmed` on Orchestrator-produced evidence (isolated diff, green rows, revert-proof controls reddening exactly the named rows, `src:core` `592 passed`). Records: `markdown/h2.1-audit-brief.md`, `-evidence.md`, `-instrument.sh`, `h2.1-derive-diff.txt`, `h2.1-audit-reviewer-verdict.md`, `h2.1-audit-verdict.md`. The verdict's referral is landed as Amendment 2026-08-26 in `h2-audit-reconciliation.md`: the exit criterion's derivation clause now names the direct-input rule. |
 | `h2.2-prose` | `implementer` — Opus native | **Audited FAIL, reconciled.** The Sol `analyst` audit (session `01a03ded-7d86-7d52-93f1-e5657714feb7`) confirmed the claim-5 overturn, the openers, the integrated hunk, and the writing sweep, and broke the cascade bullet, the derivation qualifier, and the guide's coverage sentence — the last upgraded from derivation to measurement by the Orchestrator's bridge probe (`projectSpan 0..3` bridges an uncovered interior; a boundary in the uncovered position reports `undefined`). The report-versus-held-tree gap is the Orchestrator's integration step, closed by `markdown/h2.2-integration-evidence.txt`. Records: `markdown/h2.2-audit-brief.md`, `-analyst-verdict.md`, `h2.2-audit-verdict.md`. |
 | `h2.2.1-prose` | `implementer` — Opus native | **Landed at `e4c434c`.** Every broken finding closed as prose: the cascade bullet (last run at the position, with an extent probe justifying "whatever its extent"), the inline own-region qualifier, the boundary rule across the guide and the `MarkdownSource` remark, and the `Markdown` class TSDoc's fixed resolution order. Scoped gates green: `592 passed`, guides `18 passed`. Records: `markdown/h2.2.1-prose-brief.md`, `-report.md`. Its audit rides as added claims in the `h2.3-fences` Sol `analyst` round. |
-| `h2.3-fences` | `implementer` — Opus native | **In flight** from the clean `e4c434c` baseline. R4: transcribe the corrected provenance fences into executed rows in the round's own test files. Auditor: Sol `analyst`, whose round also audits the `h2.2.1-prose` corrections. Brief: `lsp/tmp/units/h2.3-fences-brief.md`. |
+| `h2.3-fences` | `implementer` — Opus native | **Landed at `e5876ff`.** Every § Source provenance fence reading executed against shipped code and matched its comment; the added and reused rows are named in the report's reuse table, `src:core` Orchestrator-verified `599 passed (599)`. The `projectSpan` bridging clause stays open as a recorded observation for a unit owning `helpers.test.ts`. Auditor: the objective lane on the substituted Opus engine, also auditing the `h2.2.1-prose` corrections. Records: `markdown/h2.3-fences-brief.md`, `-report.md`. |
 | `h2.4-mechanical` | `builder` — Sonnet | Queued. R6 and the scan-leaf TSDoc from R5. Auditor: `checker`. |
 | `h2.5-gates` | `verifier` | Queued. |
 
 ## Bench and lane discipline
+
+**The Sol model is dark on this account, read 2026-08-26.** After a completed device-auth
+login, a bounded `codex exec` probe on `gpt-5.6-sol` returns HTTP 400 "not supported when using
+Codex with a ChatGPT account" (thread `01a03e0d-151c-7aa2-bfe7-5a7f7db1479a`), while
+`gpt-5.6-terra` and the CLI default model both round-trip `BENCH_LIVE` exit 0. The earlier
+"degraded-auth symptom" ruling on that 400 is falsified: the credential is fresh and the model is
+refused. Per § Engine assignment in `.agents/orchestration.md`, Opus 5 runs every audit lane —
+separate subagents, clean contexts, blind, each told its perspective — until the account regains
+Sol access. Each substituted lane is named in the routing ledger. Re-probe at dispatch, not from
+this snapshot.
 
 One Sol lane at a time through `codex exec` script files written in the session scratchpad,
 journals under `tmp/codex/` in THIS repository, one Monitor per exec filtered to milestones and

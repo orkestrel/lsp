@@ -1,0 +1,13 @@
+ M guides/probe.md
+ M src/core/helpers.ts
+ M src/core/types.ts
+ M src/core/validators.ts
+ M src/server/stages/LintStage.ts
+ M src/server/stages/RuntimeStage.ts
+ M src/server/stages/TypeStage.ts
+ M tests/src/core/helpers.test.ts
+ M tests/src/core/validators.test.ts
+ M tests/src/server/stages/LintStage.test.ts
+ M tests/src/server/stages/RuntimeStage.test.ts
+ M tests/src/server/stages/TypeStage.test.ts
+CAPTURE_DATE: 2026-08-26
