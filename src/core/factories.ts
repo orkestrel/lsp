@@ -4,7 +4,8 @@ import { LSPClient } from './LSPClient.js'
 /**
  * Creates a transport-agnostic Language Server Protocol client.
  *
- * @param options - The transport, workspace, deadline, abort signal, and initial event hooks.
+ * @param options - The transport, workspace, lifecycle timeout, client abort, and initial event
+ * hooks.
  * @returns A client that initializes and drives the configured protocol peer.
  *
  * @example

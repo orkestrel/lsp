@@ -313,12 +313,15 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({
-				uri: 'file:///workspace/absent.ts',
-				languageId: 'typescript',
-				version: 1,
-				text: '',
-			}),
+			client.open(
+				{
+					uri: 'file:///workspace/absent.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'protocol' })
 		await client.destroy()
 	})
@@ -329,12 +332,15 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({
-				uri: 'file:///workspace/zero.ts',
-				languageId: 'typescript',
-				version: 1,
-				text: '',
-			}),
+			client.open(
+				{
+					uri: 'file:///workspace/zero.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'protocol' })
 		await client.destroy()
 	})
@@ -358,7 +364,10 @@ describe('LSPClient', () => {
 			await client.start()
 
 			await expect(
-				client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+				client.open(
+					{ uri, languageId: 'typescript', version: 1, text: '' },
+					{ signal: new AbortController().signal },
+				),
 			).resolves.toEqual([])
 			await client.destroy()
 		}
@@ -371,12 +380,15 @@ describe('LSPClient', () => {
 			await client.start()
 
 			await expect(
-				client.open({
-					uri: 'file:///workspace/options.ts',
-					languageId: 'typescript',
-					version: 1,
-					text: '',
-				}),
+				client.open(
+					{
+						uri: 'file:///workspace/options.ts',
+						languageId: 'typescript',
+						version: 1,
+						text: '',
+					},
+					{ signal: new AbortController().signal },
+				),
 			).rejects.toMatchObject({ code: 'protocol' })
 			await client.destroy()
 		}
@@ -399,7 +411,10 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+			client.open(
+				{ uri, languageId: 'typescript', version: 1, text: '' },
+				{ signal: new AbortController().signal },
+			),
 		).resolves.toEqual([])
 		await client.destroy()
 	})
@@ -420,24 +435,185 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+			client.open(
+				{ uri, languageId: 'typescript', version: 1, text: '' },
+				{ signal: new AbortController().signal },
+			),
 		).resolves.toEqual([])
 		await client.destroy()
 	})
 
-	it('bounds a push diagnostic publication deadline', async () => {
-		const transport = new LSPFixtureTransport()
+	it('refuses an already-aborted open before writing document open', async () => {
+		const controller = new AbortController()
+		controller.abort('stop')
+		const transport = new LSPFixtureTransport({
+			handler: (peer, message) => {
+				if ('method' in message && message.method === LSP_METHODS.open)
+					peer.receive({
+						jsonrpc: '2.0',
+						method: LSP_METHODS.publish,
+						params: {
+							uri: 'file:///workspace/already-aborted.ts',
+							diagnostics: [],
+						},
+					})
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+		let caught: unknown
+
+		try {
+			await client.open(
+				{
+					uri: 'file:///workspace/already-aborted.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: controller.signal },
+			)
+		} catch (error) {
+			caught = error
+		}
+
+		expect(transport.operations).not.toContain(LSP_METHODS.open)
+		expect(caught).toMatchObject({ code: 'aborted' })
+		await client.destroy()
+	})
+
+	it('aborts a pushed diagnostic wait without destroying the client', async () => {
+		const controller = new AbortController()
+		const nextURI = 'file:///workspace/push-next.ts'
+		const transport = new LSPFixtureTransport({
+			handler: (peer, message) => {
+				if (!('method' in message) || message.method !== LSP_METHODS.open) return
+				const textDocument = message.params?.textDocument
+				if (
+					typeof textDocument === 'object' &&
+					textDocument !== null &&
+					'uri' in textDocument &&
+					textDocument.uri === nextURI
+				)
+					peer.receive({
+						jsonrpc: '2.0',
+						method: LSP_METHODS.publish,
+						params: { uri: nextURI, diagnostics: [] },
+					})
+			},
+		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
 		await client.start()
-
-		await expect(
-			client.open({
-				uri: 'file:///workspace/silent.ts',
+		const aborted = client.open(
+			{
+				uri: 'file:///workspace/push-aborted.ts',
 				languageId: 'typescript',
 				version: 1,
 				text: '',
-			}),
-		).rejects.toMatchObject({ code: 'timeout' })
+			},
+			{ signal: controller.signal },
+		)
+		controller.abort('stop')
+
+		await expect(aborted).rejects.toMatchObject({ code: 'aborted' })
+		await expect(
+			client.open(
+				{ uri: nextURI, languageId: 'typescript', version: 1, text: '' },
+				{ signal: new AbortController().signal },
+			),
+		).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('keeps a push-aborted document closeable', async () => {
+		const controller = new AbortController()
+		const uri = 'file:///workspace/push-closeable.ts'
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
+		await client.start()
+		const diagnostics = client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: controller.signal },
+		)
+		controller.abort('stop')
+
+		await expect(diagnostics).rejects.toMatchObject({ code: 'aborted' })
+		await client.close(uri)
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.close,
+			params: { textDocument: { uri } },
+		})
+		await client.destroy()
+	})
+
+	it('resolves pushed diagnostics after the constructor timeout has elapsed', async () => {
+		const uri = 'file:///workspace/push-after-timeout.ts'
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
+		await client.start()
+		const diagnostics = client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
+		diagnostics.catch(() => {})
+
+		await waitForDelay(30)
+		transport.receive({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.publish,
+			params: { uri, diagnostics: [] },
+		})
+
+		await expect(diagnostics).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('isolates a call abort from another pending open', async () => {
+		const controller = new AbortController()
+		const pendingURI = 'file:///workspace/push-pending.ts'
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
+		await client.start()
+		const aborted = client.open(
+			{
+				uri: 'file:///workspace/push-isolated.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: controller.signal },
+		)
+		const pending = client.open(
+			{ uri: pendingURI, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
+		pending.catch(() => {})
+		controller.abort('stop')
+
+		await expect(aborted).rejects.toMatchObject({ code: 'aborted' })
+		transport.receive({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.publish,
+			params: { uri: pendingURI, diagnostics: [] },
+		})
+		await expect(pending).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('bounds a push diagnostic publication with its call signal', async () => {
+		const uri = 'file:///workspace/silent.ts'
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+
+		await expect(
+			client.open(
+				{ uri, languageId: 'typescript', version: 1, text: '' },
+				{ signal: AbortSignal.timeout(10) },
+			),
+		).rejects.toMatchObject({ code: 'aborted' })
+		await client.close(uri)
 		await client.destroy()
 	})
 
@@ -460,13 +636,108 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({
-				uri: 'file:///workspace/pull.ts',
+			client.open(
+				{
+					uri: 'file:///workspace/pull.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			),
+		).resolves.toEqual([])
+		await client.destroy()
+	})
+
+	it('aborts a pulled diagnostic request and writes cancellation', async () => {
+		const controller = new AbortController()
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
+		await client.start()
+		const diagnostics = client.open(
+			{
+				uri: 'file:///workspace/pull-aborted.ts',
 				languageId: 'typescript',
 				version: 1,
 				text: '',
-			}),
-		).resolves.toEqual([])
+			},
+			{ signal: controller.signal },
+		)
+		await waitForDelay()
+		const request = transport.request(LSP_METHODS.diagnostic)
+		if (request === undefined) throw new Error('Expected a diagnostic request')
+		controller.abort('stop')
+
+		await expect(diagnostics).rejects.toMatchObject({ code: 'aborted' })
+		await waitForDelay()
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.cancel,
+			params: { id: request.id },
+		})
+		await client.destroy()
+	})
+
+	it('keeps a pull-aborted document closeable', async () => {
+		const controller = new AbortController()
+		const uri = 'file:///workspace/pull-closeable.ts'
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
+		await client.start()
+		const diagnostics = client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: controller.signal },
+		)
+		await waitForDelay()
+		controller.abort('stop')
+
+		await expect(diagnostics).rejects.toMatchObject({ code: 'aborted' })
+		await client.close(uri)
+		expect(transport.messages).toContainEqual({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.close,
+			params: { textDocument: { uri } },
+		})
+		await client.destroy()
+	})
+
+	it('resolves pulled diagnostics after the constructor timeout has elapsed', async () => {
+		const uri = 'file:///workspace/pull-after-timeout.ts'
+		const transport = new LSPFixtureTransport({
+			capabilities: {
+				textDocumentSync: 1,
+				diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 10 })
+		await client.start()
+		const diagnostics = client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
+		diagnostics.catch(() => {})
+		await waitForDelay()
+		const request = transport.request(LSP_METHODS.diagnostic)
+		if (request === undefined) throw new Error('Expected a diagnostic request')
+
+		await waitForDelay(30)
+		transport.receive({
+			jsonrpc: '2.0',
+			id: request.id,
+			result: { kind: 'full', items: [] },
+		})
+
+		await expect(diagnostics).resolves.toEqual([])
 		await client.destroy()
 	})
 
@@ -489,12 +760,15 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({
-				uri: 'file:///workspace/unchanged.ts',
-				languageId: 'typescript',
-				version: 1,
-				text: '',
-			}),
+			client.open(
+				{
+					uri: 'file:///workspace/unchanged.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'protocol' })
 		await client.destroy()
 	})
@@ -528,13 +802,22 @@ describe('LSPClient', () => {
 		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		await client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		await client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
 		await client.close(uri)
-		await client.open({ uri, languageId: 'typescript', version: 2, text: '' })
+		await client.open(
+			{ uri, languageId: 'typescript', version: 2, text: '' },
+			{ signal: new AbortController().signal },
+		)
 		await client.close(uri)
 
 		await expect(
-			client.open({ uri, languageId: 'typescript', version: 3, text: '' }),
+			client.open(
+				{ uri, languageId: 'typescript', version: 3, text: '' },
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'protocol' })
 		await client.destroy()
 	})
@@ -559,10 +842,16 @@ describe('LSPClient', () => {
 		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		await client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		await client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
 		transport.exit({ code: 1, signal: null })
 		await client.start()
-		await client.open({ uri, languageId: 'typescript', version: 2, text: '' })
+		await client.open(
+			{ uri, languageId: 'typescript', version: 2, text: '' },
+			{ signal: new AbortController().signal },
+		)
 
 		expect(params[1]).not.toMatchObject({ previousResultId: 'session-result' })
 		await client.destroy()
@@ -631,10 +920,16 @@ describe('LSPClient', () => {
 		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		await client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		await client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
 
 		await expect(
-			client.open({ uri, languageId: 'typescript', version: 1, text: '' }),
+			client.open(
+				{ uri, languageId: 'typescript', version: 1, text: '' },
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'duplicate' })
 		await client.destroy()
 	})
@@ -685,18 +980,24 @@ describe('LSPClient', () => {
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
 
-		const first = client.open({
-			uri: 'file:///workspace/first.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
-		const next = client.open({
-			uri: 'file:///workspace/next.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
+		const first = client.open(
+			{
+				uri: 'file:///workspace/first.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
+		const next = client.open(
+			{
+				uri: 'file:///workspace/next.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
 
 		await expect(Promise.all([first, next])).resolves.toMatchObject([
 			[{ message: 'first' }],
@@ -770,7 +1071,7 @@ describe('LSPClient', () => {
 		await client.destroy()
 	})
 
-	it('times out one request and sends its cancel notification', async () => {
+	it('aborts one request and sends its cancel notification', async () => {
 		const transport = new LSPFixtureTransport({
 			capabilities: {
 				textDocumentSync: 1,
@@ -798,23 +1099,29 @@ describe('LSPClient', () => {
 				}
 			},
 		})
-		const client = new LSPClient({ transport, workspace: 'file:///workspace', timeout: 20 })
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		const stalled = client.open({
-			uri: 'file:///workspace/stalled.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
-		const healthy = client.open({
-			uri: 'file:///workspace/healthy.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
+		const stalled = client.open(
+			{
+				uri: 'file:///workspace/stalled.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: AbortSignal.timeout(20) },
+		)
+		const healthy = client.open(
+			{
+				uri: 'file:///workspace/healthy.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
 
 		await expect(healthy).resolves.toEqual([])
-		await expect(stalled).rejects.toMatchObject({ code: 'timeout' })
+		await expect(stalled).rejects.toMatchObject({ code: 'aborted' })
 		const diagnostic = transport.request(LSP_METHODS.diagnostic)
 		expect(transport.messages).toContainEqual({
 			jsonrpc: '2.0',
@@ -839,18 +1146,24 @@ describe('LSPClient', () => {
 			signal: controller.signal,
 		})
 		await client.start()
-		const first = client.open({
-			uri: 'file:///workspace/abort-a.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
-		const next = client.open({
-			uri: 'file:///workspace/abort-b.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
+		const first = client.open(
+			{
+				uri: 'file:///workspace/abort-a.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
+		const next = client.open(
+			{
+				uri: 'file:///workspace/abort-b.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
 
 		controller.abort('stop')
 
@@ -874,12 +1187,15 @@ describe('LSPClient', () => {
 			on: { exit: exits.handler },
 		})
 		await client.start()
-		const pending = client.open({
-			uri: 'file:///workspace/exit.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
+		const pending = client.open(
+			{
+				uri: 'file:///workspace/exit.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
 		const exit = { code: 1, signal: null }
 
 		transport.exit(exit)
@@ -928,12 +1244,15 @@ describe('LSPClient', () => {
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
 
-		const result = client.open({
-			uri: 'file:///workspace/server-error.ts',
-			languageId: 'typescript',
-			version: 1,
-			text: '',
-		})
+		const result = client.open(
+			{
+				uri: 'file:///workspace/server-error.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
 		await expect(result).rejects.toMatchObject({
 			code: 'server',
 			context: { code: wire.code, value: wire },
@@ -973,12 +1292,15 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({
-				uri: 'file:///workspace/throw.ts',
-				languageId: 'typescript',
-				version: 1,
-				text: '',
-			}),
+			client.open(
+				{
+					uri: 'file:///workspace/throw.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'closed' })
 		await waitForDelay(20)
 		expect(transport.messages).not.toContainEqual({
@@ -1001,12 +1323,15 @@ describe('LSPClient', () => {
 		await client.start()
 
 		await expect(
-			client.open({
-				uri: 'file:///workspace/refused.ts',
-				languageId: 'typescript',
-				version: 1,
-				text: '',
-			}),
+			client.open(
+				{
+					uri: 'file:///workspace/refused.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			),
 		).rejects.toMatchObject({ code: 'closed' })
 		await client.destroy()
 	})
@@ -1025,11 +1350,17 @@ describe('LSPClient', () => {
 		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		await client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		await client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
 
 		await client.close(uri)
 		await expect(
-			client.open({ uri, languageId: 'typescript', version: 2, text: '' }),
+			client.open(
+				{ uri, languageId: 'typescript', version: 2, text: '' },
+				{ signal: new AbortController().signal },
+			),
 		).resolves.toEqual([])
 		expect(transport.messages).toContainEqual({
 			jsonrpc: '2.0',
@@ -1053,7 +1384,10 @@ describe('LSPClient', () => {
 		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		const publication = client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		const publication = client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: new AbortController().signal },
+		)
 
 		await client.close(uri)
 
@@ -1298,27 +1632,29 @@ describe('LSPClient', () => {
 		).toHaveLength(0)
 	})
 
-	it('detaches a drained publication deadline before the next generation', async () => {
+	it('detaches a drained publication signal before the next generation', async () => {
+		const controller = new AbortController()
 		const transport = new LSPFixtureTransport()
-		const client = new LSPClient({
-			transport,
-			workspace: 'file:///workspace',
-			timeout: 400,
-		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
 		const uri = 'file:///workspace/generation.ts'
-		const first = client.open({ uri, languageId: 'typescript', version: 1, text: '' })
+		const first = client.open(
+			{ uri, languageId: 'typescript', version: 1, text: '' },
+			{ signal: controller.signal },
+		)
 		first.catch(() => {})
-		await waitForDelay(10)
+		await waitForDelay()
 
 		transport.exit({ code: 1, signal: null })
 
 		await expect(first).rejects.toMatchObject({ code: 'closed' })
-		await waitForDelay(150)
 		await client.start()
-		const next = client.open({ uri, languageId: 'typescript', version: 2, text: '' })
+		const next = client.open(
+			{ uri, languageId: 'typescript', version: 2, text: '' },
+			{ signal: new AbortController().signal },
+		)
 		next.catch(() => {})
-		await waitForDelay(310)
+		controller.abort('stale')
 		transport.receive({
 			jsonrpc: '2.0',
 			method: LSP_METHODS.publish,
@@ -1336,12 +1672,15 @@ describe('LSPClient', () => {
 		let caught: unknown
 
 		try {
-			await client.open({
-				uri: 'file:///workspace/error.ts',
-				languageId: 'typescript',
-				version: 1,
-				text: '',
-			})
+			await client.open(
+				{
+					uri: 'file:///workspace/error.ts',
+					languageId: 'typescript',
+					version: 1,
+					text: '',
+				},
+				{ signal: new AbortController().signal },
+			)
 		} catch (error) {
 			caught = error
 		}

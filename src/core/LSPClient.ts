@@ -10,6 +10,7 @@ import type {
 	LSPClientInterface,
 	LSPClientLifecycle,
 	LSPClientOptions,
+	LSPOpenOptions,
 	LSPDecodeState,
 	LSPDiagnostic,
 	LSPDocumentDiagnosticParams,
@@ -41,18 +42,24 @@ import {
  * @remarks
  * The client advertises UTF-16 positions, owns opened document URIs until they are closed, and
  * selects pull or push diagnostics from the server's initialize result. Monotonic identifiers and
- * deadline-bound pending entries correlate request outcomes.
+ * signal-bound pending entries correlate request outcomes.
  *
  * @example
  * ```ts
  * const client = new LSPClient({ transport, workspace: 'file:///workspace' })
  * await client.start()
- * const diagnostics = await client.open({
- * 	uri: 'file:///workspace/main.ts',
- * 	languageId: 'typescript',
- * 	version: 1,
- * 	text: 'const value = 1',
- * })
+ * const signal = AbortSignal.timeout(30_000)
+ * const uri = 'file:///workspace/main.ts'
+ * const diagnostics = await client.open(
+ * 	{
+ * 		uri,
+ * 		languageId: 'typescript',
+ * 		version: 1,
+ * 		text: 'const value = 1',
+ * 	},
+ * 	{ signal },
+ * )
+ * await client.close(uri)
  * await client.destroy()
  * ```
  */
@@ -72,8 +79,8 @@ export class LSPClient implements LSPClientInterface {
 			readonly resolve: (value: unknown) => void
 			readonly reject: (reason?: unknown) => void
 			readonly method: string
-			readonly deadline: AbortSignal
-			readonly timeout: () => void
+			readonly signal: AbortSignal
+			readonly abort: () => void
 		}
 	>()
 	readonly #publications = new Map<
@@ -81,8 +88,8 @@ export class LSPClient implements LSPClientInterface {
 		{
 			readonly resolve: (diagnostics: readonly LSPDiagnostic[]) => void
 			readonly reject: (reason?: unknown) => void
-			readonly deadline: AbortSignal
-			readonly timeout: () => void
+			readonly signal: AbortSignal
+			readonly abort: () => void
 		}
 	>()
 	readonly #documents = new Set<LSPDocumentURI>()
@@ -145,7 +152,16 @@ export class LSPClient implements LSPClientInterface {
 		return starting
 	}
 
-	async open(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]> {
+	async open(
+		document: LSPTextDocumentItem,
+		options: LSPOpenOptions,
+	): Promise<readonly LSPDiagnostic[]> {
+		const signal = options.signal
+		if (signal.aborted)
+			throw new LSPError('The LSP diagnostic wait was aborted', {
+				code: 'aborted',
+				cause: signal.reason,
+			})
 		if (this.#lifecycle.phase !== 'ready')
 			throw new LSPError('The LSP client is closed', { code: 'closed' })
 		if (this.#documents.has(document.uri))
@@ -165,8 +181,9 @@ export class LSPClient implements LSPClientInterface {
 			})
 
 		this.#documents.add(document.uri)
-		if (this.#capabilities?.diagnosticProvider !== undefined) return this.#openPull(document)
-		return this.#openPush(document)
+		if (this.#capabilities?.diagnosticProvider !== undefined)
+			return this.#openPull(document, signal)
+		return this.#openPush(document, signal)
 	}
 
 	async close(uri: LSPDocumentURI): Promise<void> {
@@ -260,7 +277,10 @@ export class LSPClient implements LSPClientInterface {
 		}
 	}
 
-	async #openPull(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]> {
+	async #openPull(
+		document: LSPTextDocumentItem,
+		signal: AbortSignal,
+	): Promise<readonly LSPDiagnostic[]> {
 		try {
 			await this.#write({
 				jsonrpc: '2.0',
@@ -271,6 +291,11 @@ export class LSPClient implements LSPClientInterface {
 			this.#documents.delete(document.uri)
 			throw error
 		}
+		if (signal.aborted)
+			throw new LSPError('The LSP diagnostic wait was aborted', {
+				code: 'aborted',
+				cause: signal.reason,
+			})
 		if (this.#signal?.aborted === true)
 			throw new LSPError('The LSP client was aborted', {
 				code: 'aborted',
@@ -286,7 +311,7 @@ export class LSPClient implements LSPClientInterface {
 				: { identifier: this.#capabilities.diagnosticProvider.identifier }),
 			...(previous === undefined ? {} : { previousResultId: previous.resultId }),
 		} satisfies LSPDocumentDiagnosticParams
-		const result = await this.#request(LSP_METHODS.diagnostic, params)
+		const result = await this.#request(LSP_METHODS.diagnostic, params, signal)
 		if (!isLSPDocumentDiagnosticReport(result))
 			throw new LSPError('The LSP server returned an invalid diagnostic report', {
 				code: 'protocol',
@@ -311,12 +336,15 @@ export class LSPClient implements LSPClientInterface {
 		return diagnostics
 	}
 
-	async #openPush(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]> {
+	async #openPush(
+		document: LSPTextDocumentItem,
+		signal: AbortSignal,
+	): Promise<readonly LSPDiagnostic[]> {
 		const publication = Promise.withResolvers<readonly LSPDiagnostic[]>()
-		const deadline = AbortSignal.timeout(this.#timeout)
-		const timeout = this.#timeoutPublication.bind(this, document.uri)
-		deadline.addEventListener('abort', timeout, { once: true })
-		this.#publications.set(document.uri, { ...publication, deadline, timeout })
+		const abort = this.#abortPublication.bind(this, document.uri, signal)
+		this.#publications.set(document.uri, { ...publication, signal, abort })
+		signal.addEventListener('abort', abort, { once: true })
+		if (signal.aborted) abort()
 		try {
 			await this.#write({
 				jsonrpc: '2.0',
@@ -330,7 +358,11 @@ export class LSPClient implements LSPClientInterface {
 		return publication.promise
 	}
 
-	#request(method: string, params?: Readonly<Record<string, unknown>>): Promise<unknown> {
+	#request(
+		method: string,
+		params?: Readonly<Record<string, unknown>>,
+		signal?: AbortSignal,
+	): Promise<unknown> {
 		this.#nextId += 1
 		const id = this.#nextId
 		const request: JSONRPCRequest = {
@@ -340,10 +372,14 @@ export class LSPClient implements LSPClientInterface {
 			...(params === undefined ? {} : { params }),
 		}
 		return new Promise<unknown>((resolve, reject) => {
-			const deadline = AbortSignal.timeout(this.#timeout)
-			const timeout = this.#timeoutRequest.bind(this, id, method)
-			deadline.addEventListener('abort', timeout, { once: true })
-			this.#pending.set(id, { resolve, reject, method, deadline, timeout })
+			const bound = signal ?? AbortSignal.timeout(this.#timeout)
+			const abort =
+				signal === undefined
+					? this.#timeoutRequest.bind(this, id, method)
+					: this.#abortRequest.bind(this, id, method, signal)
+			this.#pending.set(id, { resolve, reject, method, signal: bound, abort })
+			bound.addEventListener('abort', abort, { once: true })
+			if (bound.aborted) abort()
 			this.#send(request).then(
 				(written) => {
 					if (!written)
@@ -522,8 +558,21 @@ export class LSPClient implements LSPClientInterface {
 			code: 'timeout',
 			context: { value: id },
 		})
-		if (!this.#settle(id, timeout, true)) return
+		this.#settle(id, timeout, true)
+	}
+
+	#abortRequest(id: JSONRPCId, method: string, signal: AbortSignal): void {
+		const aborted = new LSPError(`The LSP request '${method}' was aborted`, {
+			code: 'aborted',
+			context: { value: id },
+			cause: signal.reason,
+		})
+		if (!this.#settle(id, aborted, true)) return
 		if (this.#lifecycle.phase !== 'ready') return
+		this.#cancelRequest(id)
+	}
+
+	#cancelRequest(id: JSONRPCId): void {
 		this.#send({
 			jsonrpc: '2.0',
 			method: LSP_METHODS.cancel,
@@ -531,19 +580,20 @@ export class LSPClient implements LSPClientInterface {
 		}).catch((error: unknown) => this.#emitter.emit('error', error))
 	}
 
-	#timeoutPublication(uri: LSPDocumentURI): void {
-		const timeout = new LSPError('The LSP diagnostic publication exceeded its deadline', {
-			code: 'timeout',
+	#abortPublication(uri: LSPDocumentURI, signal: AbortSignal): void {
+		const aborted = new LSPError('The LSP diagnostic wait was aborted', {
+			code: 'aborted',
 			context: { value: uri },
+			cause: signal.reason,
 		})
-		if (this.#settlePublication(uri, timeout, true)) this.#documents.delete(uri)
+		this.#settlePublication(uri, aborted, true)
 	}
 
 	#settlePublication(uri: LSPDocumentURI, value: unknown, failed: boolean): boolean {
 		const publication = this.#publications.get(uri)
 		if (publication === undefined) return false
 		this.#publications.delete(uri)
-		publication.deadline.removeEventListener('abort', publication.timeout)
+		publication.signal.removeEventListener('abort', publication.abort)
 		if (failed) publication.reject(value)
 		else if (Array.isArray(value)) publication.resolve(Object.freeze([...value]))
 		return true
@@ -553,7 +603,7 @@ export class LSPClient implements LSPClientInterface {
 		const pending = this.#pending.get(id)
 		if (pending === undefined) return false
 		this.#pending.delete(id)
-		pending.deadline.removeEventListener('abort', pending.timeout)
+		pending.signal.removeEventListener('abort', pending.abort)
 		if (failed) pending.reject(value)
 		else pending.resolve(value)
 		return true

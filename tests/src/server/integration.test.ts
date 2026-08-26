@@ -37,12 +37,15 @@ describe('src server oxlint receipt', () => {
 				save: { includeText: false },
 			})
 			expect(client.encoding).toBe('utf-16')
-			const diagnostics = await client.open({
-				uri: pathToFileURL(join(scratch.path, 'main.js')).href,
-				languageId: 'javascript',
-				version: 1,
-				text: OXLINT_DOCUMENT,
-			})
+			const diagnostics = await client.open(
+				{
+					uri: pathToFileURL(join(scratch.path, 'main.js')).href,
+					languageId: 'javascript',
+					version: 1,
+					text: OXLINT_DOCUMENT,
+				},
+				{ signal: AbortSignal.timeout(10_000) },
+			)
 			expect(diagnostics).toHaveLength(1)
 			expect(diagnostics[0]?.code).toBe(OXLINT_CODE)
 			expect(diagnostics[0]?.severity).toBe(1)

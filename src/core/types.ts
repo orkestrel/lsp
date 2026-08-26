@@ -266,8 +266,32 @@ export interface LSPClientOptions {
 	readonly error?: EmitterErrorHandler
 	readonly transport: LSPTransportInterface
 	readonly workspace: LSPDocumentURI
+	/**
+	 * Bounds the initialize and shutdown requests, the destroy-time exit write, and transport-close
+	 * settlement, in milliseconds. Default: `30000`.
+	 *
+	 * @remarks
+	 * This value does not bound diagnostics requested by `open`. That wait is bounded by the signal
+	 * `LSPOpenOptions` requires.
+	 */
 	readonly timeout?: number
+	/**
+	 * Aborts the client, rejects its pending operations with an `LSPError` coded `aborted`, and
+	 * begins destruction.
+	 */
 	readonly signal?: AbortSignal
+}
+
+/** Configures a document inspection. */
+export interface LSPOpenOptions {
+	/**
+	 * Aborts the diagnostics wait without destroying the client.
+	 *
+	 * @remarks
+	 * An already-aborted signal refuses the operation before `textDocument/didOpen` is written. An
+	 * abort after that notification rejects the operation with an `LSPError` coded `aborted`.
+	 */
+	readonly signal: AbortSignal
 }
 
 /** Defines the document-oriented behavior exposed by an LSP client. */
@@ -276,10 +300,26 @@ export interface LSPClientInterface {
 	readonly capabilities: LSPServerCapabilities | undefined
 	readonly encoding: LSPPositionEncoding | undefined
 	start(): Promise<void>
-	open(document: LSPTextDocumentItem): Promise<readonly LSPDiagnostic[]>
+	/**
+	 * Opens a document and waits for diagnostics through the path selected from the server
+	 * capabilities.
+	 *
+	 * @param document - The document identity, version, language, and text sent to the server.
+	 * @param options - The options carrying the cancellation signal that bounds the diagnostics wait.
+	 * @returns A promise that resolves with the published or pulled diagnostics.
+	 * @throws An `LSPError`. Thrown when the client is not ready, coded `closed`; when the URI is
+	 * already open, coded `duplicate`; when the server does not support document open and close,
+	 * coded `protocol`; and when `options.signal` is already aborted or aborts before diagnostics
+	 * settle, coded `aborted`.
+	 * @remarks
+	 * The signal controls this operation only. It does not destroy the client, and the configured
+	 * `timeout` does not bound this wait. When `textDocument/didOpen` was written before
+	 * cancellation, the URI remains owned until `close` succeeds.
+	 */
+	open(document: LSPTextDocumentItem, options: LSPOpenOptions): Promise<readonly LSPDiagnostic[]>
 	close(uri: LSPDocumentURI): Promise<void>
 	/**
-	 * Tears down the client within the configured deadline.
+	 * Tears down the client within the configured timeout.
 	 *
 	 * @returns A promise that resolves after transport settlement and listener removal.
 	 * @remarks A close failure that settles before the deadline is emitted before the emitter is
