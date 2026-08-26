@@ -1,12 +1,12 @@
 import { createLSPClient } from '@src/core'
 import { createStdioTransport } from '@src/server'
+import { requireValue } from '@orkestrel/test'
 import { destroyScratch, createScratch, isRunning } from '@orkestrel/test/server'
 import {
 	OXLINT_CODE,
 	OXLINT_DOCUMENT,
 	OXLINT_FILES,
 	createOxlintOptions,
-	readChildProcesses,
 	waitForReaped,
 } from '../../setupServer.js'
 import { join } from 'node:path'
@@ -25,12 +25,14 @@ describe('src server oxlint receipt', () => {
 			workspace: pathToFileURL(scratch.path).href,
 			timeout: 10_000,
 		})
-		const baseline = new Set(readChildProcesses(process.pid))
-		const spawned: number[] = []
+		expect(transport.pid).toBeUndefined()
+		// The identifier is read while the generation is live, because retirement clears it and the
+		// reaping wait below needs the number the host gave this child.
+		let server: number | undefined = undefined
 		try {
 			await client.start()
-			spawned.push(...readChildProcesses(process.pid).filter((pid) => !baseline.has(pid)))
-			expect(spawned).toHaveLength(1)
+			server = requireValue(transport.pid, 'the transport reported no language-server identifier')
+			expect(isRunning(server)).toBe(true)
 			expect(client.capabilities?.textDocumentSync).toStrictEqual({
 				openClose: true,
 				change: 1,
@@ -57,9 +59,9 @@ describe('src server oxlint receipt', () => {
 			// Teardown and reaping run whatever the assertions did, so a failed expectation reports
 			// itself instead of leaving a language server behind for the next proof to meet.
 			await client.destroy()
-			for (const pid of spawned) await waitForReaped(pid)
+			if (server !== undefined) await waitForReaped(server)
 			await destroyScratch(scratch)
 		}
-		for (const pid of spawned) expect(isRunning(pid)).toBe(false)
+		expect(transport.pid).toBeUndefined()
 	}, 30_000)
 })

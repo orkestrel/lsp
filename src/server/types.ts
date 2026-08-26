@@ -1,3 +1,5 @@
+import type { LSPTransportInterface } from '@src/core'
+
 /**
  * Configures a Language Server Protocol child process reached over its standard streams.
  *
@@ -26,4 +28,18 @@ export interface StdioTransportOptions {
 		readonly environment?: Readonly<Record<string, string | undefined>>
 	}
 	readonly grace?: number
+}
+
+/**
+ * Defines the stdio transport's own surface beyond the byte transport it carries.
+ *
+ * @remarks
+ * `pid` is the host's identifier for the child that owns the current generation. It reads
+ * `undefined` before the first `start`, after a spawn the host refused, and after a generation
+ * retires, so an identifier is present exactly while one child answers for the transport. A host
+ * reuses an identifier after it reaps the process that held it, so a caller that keeps the number
+ * past its generation holds a number rather than a claim on that child.
+ */
+export interface StdioTransportInterface extends LSPTransportInterface {
+	readonly pid: number | undefined
 }

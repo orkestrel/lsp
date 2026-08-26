@@ -1,5 +1,4 @@
-import type { LSPTransportInterface } from '@src/core'
-import type { StdioTransportOptions } from './types.js'
+import type { StdioTransportInterface, StdioTransportOptions } from './types.js'
 import { StdioTransport } from './transports/StdioTransport.js'
 
 /**
@@ -15,6 +14,6 @@ import { StdioTransport } from './transports/StdioTransport.js'
  * await client.start()
  * ```
  */
-export function createStdioTransport(options: StdioTransportOptions): LSPTransportInterface {
+export function createStdioTransport(options: StdioTransportOptions): StdioTransportInterface {
 	return new StdioTransport(options)
 }

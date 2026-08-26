@@ -1,7 +1,7 @@
 import type { EmitterInterface } from '@orkestrel/emitter'
-import type { LSPExit, LSPTransportEventMap, LSPTransportInterface } from '@src/core'
+import type { LSPExit, LSPTransportEventMap } from '@src/core'
 import type { ChildProcess } from 'node:child_process'
-import type { StdioTransportOptions } from '../types.js'
+import type { StdioTransportInterface, StdioTransportOptions } from '../types.js'
 import { Emitter } from '@orkestrel/emitter'
 import { LSPError } from '@src/core'
 import { buildSpawn, stopChild, waitForClose, waitForExit } from '@orkestrel/process/server'
@@ -39,7 +39,7 @@ import { spawn } from 'node:child_process'
  * await transport.close()
  * ```
  */
-export class StdioTransport implements LSPTransportInterface {
+export class StdioTransport implements StdioTransportInterface {
 	readonly #emitter = new Emitter<LSPTransportEventMap>()
 	readonly #command: readonly string[]
 	readonly #directory: string | undefined
@@ -67,6 +67,10 @@ export class StdioTransport implements LSPTransportInterface {
 
 	get emitter(): EmitterInterface<LSPTransportEventMap> {
 		return this.#emitter
+	}
+
+	get pid(): number | undefined {
+		return this.#owner === this.#generation ? this.#child?.pid : undefined
 	}
 
 	/**

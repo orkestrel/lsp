@@ -4,6 +4,8 @@ import { StdioTransport } from '@src/server'
 import { createRecorder, waitForCondition } from '@orkestrel/test'
 import { createScratch, destroyScratch, isRunning } from '@orkestrel/test/server'
 import {
+	FIXTURE_AMBIENT,
+	KILLED_EXIT,
 	collectPeerMessages,
 	createHolderOptions,
 	createPeerOptions,
@@ -48,6 +50,7 @@ describe('StdioTransport', () => {
 		expect(isLSPError(fault)).toBe(true)
 		expect(isLSPError(fault) ? fault.code : undefined).toBe('spawn')
 		expect(await transport.send(PING)).toBe(false)
+		expect(transport.pid).toBeUndefined()
 	})
 
 	it('refuses a second start while its child is live', async () => {
@@ -165,7 +168,7 @@ describe('StdioTransport', () => {
 			const messages = collectPeerMessages(chunks.calls.flat())
 			expect(readPeerResult(messages, 'directory')).toBe(realpathSync(scratch.path))
 			expect(readPeerResult(messages, 'variable')).toBe('carried')
-			expect(readPeerResult(messages, 'path')).toBeNull()
+			expect(readPeerResult(messages, 'ambient')).toBeNull()
 		} finally {
 			await transport.close()
 			await destroyScratch(scratch)
@@ -186,11 +189,34 @@ describe('StdioTransport', () => {
 				PEER,
 			)
 			const messages = collectPeerMessages(chunks.calls.flat())
-			expect(readPeerResult(messages, 'path')).toBe(process.env.PATH ?? null)
+			expect(readPeerResult(messages, 'ambient')).toBe(FIXTURE_AMBIENT)
 			expect(readPeerResult(messages, 'variable')).toBeNull()
 		} finally {
 			await transport.close()
 		}
+	})
+
+	it('reports the host identifier of the child owning the current generation', async () => {
+		const chunks = createRecorder<[Uint8Array]>()
+		const transport = new StdioTransport(createPeerOptions({ grace: 2_000 }))
+		transport.emitter.on('chunk', chunks.handler)
+		expect(transport.pid).toBeUndefined()
+		await transport.start()
+		try {
+			await transport.send(ECHO)
+			await waitForCondition(
+				'the echo response',
+				() => collectPeerMessages(chunks.calls.flat()).length >= 2,
+				PEER,
+			)
+			// The peer reports its own identifier over the protocol, so the transport's reading is
+			// checked against the child's own answer rather than against the call that produced it.
+			expect(transport.pid).toBe(readPeerPid(collectPeerMessages(chunks.calls.flat())))
+		} finally {
+			await transport.close()
+		}
+		expect(transport.pid).toBeUndefined()
+		await waitForReaped(readPeerPid(collectPeerMessages(chunks.calls.flat())))
 	})
 
 	it('resolves send as false before the first start and after close resolves', async () => {
@@ -240,7 +266,7 @@ describe('StdioTransport', () => {
 		await transport.close()
 		expect(performance.now() - started).toBeGreaterThanOrEqual(200)
 		await waitForCondition('the child exit event', () => exits.count === 1, PEER)
-		expect(exits.calls.flat()).toStrictEqual([{ code: null, signal: 'SIGKILL' }])
+		expect(exits.calls.flat()).toStrictEqual([KILLED_EXIT])
 		await waitForReaped(pid)
 	}, 15_000)
 

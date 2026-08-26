@@ -40,7 +40,7 @@ function handle(message) {
 				pid: process.pid,
 				directory: process.cwd(),
 				variable: process.env.LSP_FIXTURE_VALUE ?? null,
-				path: process.env.PATH ?? null,
+				ambient: process.env.LSP_FIXTURE_AMBIENT ?? null,
 				received: message.params ?? null,
 			},
 		})

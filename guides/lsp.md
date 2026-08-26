@@ -139,6 +139,12 @@ each reject `start()` with one coded `spawn`. `send()` writes bytes to the child
 reports whether it accepted them, resolving `false` before the first `start()`, after `close()`
 resolves, and after the child exits.
 
+`pid` is the host's identifier for the child that owns the current generation, and it reads
+`undefined` before the first `start()`, after a spawn the host refused, and after a generation
+retires. Read it to supervise or log the running server, and read it before `close()` when you need
+the identifier afterwards. A host reuses an identifier after it reaps the process that held it, so a
+number kept past its generation names no particular child.
+
 ## Framing state
 
 Use `parseLSPMessages()` with the preceding `LSPDecodeState` value to decode split or coalesced
@@ -253,11 +259,12 @@ The transport interface exposes these behavioral methods:
 
 The server surface provides these exports:
 
-| Export                  | Kind      | Purpose                                                                   |
-| ----------------------- | --------- | ------------------------------------------------------------------------- |
-| `StdioTransport`        | class     | Implements the byte transport over a language server child process.       |
-| `createStdioTransport`  | function  | Creates an `LSPTransportInterface` from `StdioTransportOptions`.          |
-| `StdioTransportOptions` | interface | Configures the child's command, directory, environment, and grace window. |
+| Export                    | Kind      | Purpose                                                                   |
+| ------------------------- | --------- | ------------------------------------------------------------------------- |
+| `StdioTransport`          | class     | Implements the byte transport over a language server child process.       |
+| `createStdioTransport`    | function  | Creates a `StdioTransportInterface` from `StdioTransportOptions`.         |
+| `StdioTransportInterface` | interface | Defines the readonly `pid` property beside the byte transport surface.    |
+| `StdioTransportOptions`   | interface | Configures the child's command, directory, environment, and grace window. |
 
 The client surface provides these entities and configuration contracts:
 

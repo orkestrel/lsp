@@ -1,10 +1,9 @@
-import type { JSONRPCMessage, LSPDecodeState } from '@src/core'
+import type { JSONRPCMessage, LSPDecodeState, LSPExit } from '@src/core'
 import type { StdioTransportOptions } from '@src/server'
 import { parseLSPMessages } from '@src/core'
 import { isRunning } from '@orkestrel/test/server'
 import { waitForCondition } from '@orkestrel/test'
 import { WORKSPACE_ROOT } from './setup.js'
-import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 /** The protocol-faithful child peer the server suite spawns. */
@@ -15,6 +14,31 @@ export const FIXTURE_PEER = fileURLToPath(
 /** The child peer that hands its standard output to a pipe-holding grandchild. */
 export const FIXTURE_HOLDER = fileURLToPath(
 	new URL('tests/src/server/fixtures/holder.mjs', WORKSPACE_ROOT),
+)
+
+/**
+ * The value this process carries in `LSP_FIXTURE_AMBIENT` so a child can report what it inherited.
+ *
+ * @remarks A host adds variables to a child's environment on its own account: Windows copies `PATH`,
+ * `TEMP`, `USERPROFILE`, and the rest of its required set into every child whatever environment the
+ * spawn configured, so `PATH` reports the same value there whether a spawn replaced the environment
+ * or inherited it. No host injects this variable, so a child that reports it inherited the parent's
+ * environment and a child that reports `null` received the configured environment alone.
+ */
+export const FIXTURE_AMBIENT = 'inherited'
+
+process.env.LSP_FIXTURE_AMBIENT = FIXTURE_AMBIENT
+
+/**
+ * The exit a child reports on this host after a transport kills it.
+ *
+ * @remarks A POSIX host records the signal that ended the process and no exit code. Windows carries
+ * no signal to record: `stopChild` ends the tree through the host's `taskkill` utility, and a
+ * process the host terminates reports the exit code `1`. Each reading names the same event on the
+ * host that produced it, so the expectation is read from the running host rather than fixed to one.
+ */
+export const KILLED_EXIT: LSPExit = Object.freeze(
+	process.platform === 'win32' ? { code: 1, signal: null } : { code: null, signal: 'SIGKILL' },
 )
 
 /** The Oxlint entry the live receipt drives in its language-server mode. */
@@ -159,42 +183,6 @@ export function readPeerShapes(messages: readonly JSONRPCMessage[]): readonly un
 		shapes.push(entry.params?.shape)
 	}
 	return shapes
-}
-
-/**
- * Reads one snapshot of the host process table, keeping the children of one parent.
- *
- * @param parent - The parent process identifier.
- * @returns Every child identifier this snapshot reports, in table order.
- * @throws The host's own error when it provides no `ps` process table, which is the mechanism this
- * reading depends on.
- */
-export function readProcessTable(parent: number): readonly number[] {
-	const table = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' })
-	const children: number[] = []
-	for (const line of table.split('\n')) {
-		const [pid, ppid] = line.trim().split(/\s+/)
-		if (pid === undefined || ppid === undefined) continue
-		if (Number(ppid) === parent && Number.isInteger(Number(pid))) children.push(Number(pid))
-	}
-	return children
-}
-
-/**
- * Reads the identifiers of the child processes the host still reports for one parent.
- *
- * @param parent - The parent process identifier.
- * @returns Every child identifier both snapshots reported, in table order.
- * @remarks A child a language server spawns for itself is invisible to a caller holding only the
- * transport, so the host process table is where its identifier comes from. Reading that table costs
- * a child of its own, and that child appears in its own output, so two snapshots are intersected and
- * only a child that outlived both survives. A terminated child holds its row until the host reaps
- * it, so read the table while the child is expected live and wait on `waitForReaped` for the other
- * direction.
- */
-export function readChildProcesses(parent: number): readonly number[] {
-	const earlier = new Set(readProcessTable(parent))
-	return readProcessTable(parent).filter((pid) => earlier.has(pid))
 }
 
 /**
