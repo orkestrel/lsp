@@ -1,6 +1,6 @@
 {
 	"name": "@orkestrel/lsp",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "The @orkestrel/lsp package.",
 	"keywords": [],
 	"homepage": "https://github.com/orkestrel/lsp#readme",

@@ -336,25 +336,23 @@ export class LSPClient implements LSPClientInterface {
 		return diagnostics
 	}
 
-	async #openPush(
-		document: LSPTextDocumentItem,
-		signal: AbortSignal,
-	): Promise<readonly LSPDiagnostic[]> {
+	// The publication promise is returned before the open write settles, so the caller adopts it
+	// on the same turn it is registered: a drain, an abort, or the write's own failure settles the
+	// caller instead of rejecting a promise nothing observes while the write is still in flight.
+	#openPush(document: LSPTextDocumentItem, signal: AbortSignal): Promise<readonly LSPDiagnostic[]> {
 		const publication = Promise.withResolvers<readonly LSPDiagnostic[]>()
 		const abort = this.#abortPublication.bind(this, document.uri, signal)
 		this.#publications.set(document.uri, { ...publication, signal, abort })
 		signal.addEventListener('abort', abort, { once: true })
 		if (signal.aborted) abort()
-		try {
-			await this.#write({
-				jsonrpc: '2.0',
-				method: LSP_METHODS.open,
-				params: { textDocument: document },
-			})
-		} catch (error) {
+		void this.#write({
+			jsonrpc: '2.0',
+			method: LSP_METHODS.open,
+			params: { textDocument: document },
+		}).catch((error: unknown) => {
 			this.#settlePublication(document.uri, error, true)
 			this.#documents.delete(document.uri)
-		}
+		})
 		return publication.promise
 	}
 

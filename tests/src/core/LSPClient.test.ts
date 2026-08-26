@@ -1665,6 +1665,61 @@ describe('LSPClient', () => {
 		await client.destroy()
 	})
 
+	it('settles a parked open at teardown without an unhandled rejection', async () => {
+		// The publication promise is registered before the document-open write settles, so a
+		// teardown that drains while the transport still holds that write rejects it. The caller
+		// adopts the publication promise before that write settles, so the drain reaches the
+		// caller as the returned promise's rejection, and the host reads no unobserved rejection.
+		const recorder = createRecorder<[unknown, Promise<unknown>]>()
+		const transport = new LSPFixtureTransport({
+			send: { method: LSP_METHODS.open, fault: 'hang' },
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		await client.start()
+		const opening = client.open(
+			{
+				uri: 'file:///workspace/drained-while-parked.ts',
+				languageId: 'typescript',
+				version: 1,
+				text: '',
+			},
+			{ signal: new AbortController().signal },
+		)
+		let settled = false
+		void opening.then(
+			() => {
+				settled = true
+			},
+			() => {
+				settled = true
+			},
+		)
+		process.on('unhandledRejection', recorder.handler)
+		try {
+			await waitForDelay()
+			// The precondition the drain needs: the open notification reached the transport, which
+			// parked it, and the caller's promise is still in flight when the teardown begins.
+			expect(transport.operations).toContain(LSP_METHODS.open)
+			expect(settled).toBe(false)
+			const destroying = client.destroy()
+			await expect(opening).rejects.toMatchObject({
+				code: 'closed',
+				message: 'The LSP client is closing',
+			})
+			await destroying
+			// The host reports an unobserved rejection on a later event-loop turn than the
+			// rejection itself, so the window stays open across two host timers before it is read.
+			await waitForDelay()
+			await waitForDelay()
+			const drained = recorder.calls.filter(
+				([reason]) => isLSPError(reason) && reason.message === 'The LSP client is closing',
+			)
+			expect(drained).toStrictEqual([])
+		} finally {
+			process.off('unhandledRejection', recorder.handler)
+		}
+	})
+
 	it('brands emitted and rejected failures as LSP errors', async () => {
 		const transport = new LSPFixtureTransport({ capabilities: {} })
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
