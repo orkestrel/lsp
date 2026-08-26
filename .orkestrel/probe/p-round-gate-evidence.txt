@@ -1,0 +1,19 @@
+== format:check
+== lint:check
+== check
+== build
+== test
+failed to load config from /tmp/orkestrel-test-cEwkzF/vite.config.ts
+ Test Files  11 passed (11)
+      Tests  209 passed (209)
+ Test Files  1 passed (1)
+      Tests  93 passed (93)
+ Test Files  1 passed (1)
+      Tests  46 passed (46)
+ Test Files  2 passed (2)
+      Tests  3 passed (3)
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+P_GATES_GREEN
+
+[exited with code 0]

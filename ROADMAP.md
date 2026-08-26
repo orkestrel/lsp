@@ -45,37 +45,60 @@ session-boundary snapshot of what is in flight.
   own properties, typed coordinates, membership derived from the core barrel, and a
   total drift formatter that reports any value without throwing.
 
-## In flight, 2026-08-26
+## Delivered to its first consumer
 
-- **The inspection bound split.** The first real consumer falsified one conflation:
-  `LSPClientOptions.timeout` bounds the client's lifecycle requests and the
-  diagnostics wait alike, so a consumer whose inspection budget belongs to its own
-  caller cannot bound teardown tightly without preempting that caller. The design round
-  ruled on 2026-08-26 (see `.orkestrel/lsp/l6-design-reconciliation.md`): `open` takes
-  a required options bag whose `AbortSignal` is required, the signal reaches the pushed
-  publication wait and the pulled diagnostic request alike, the client's `timeout`
-  keeps only the lifecycle and settlement bounds, and an aborted open leaves the URI
-  owned so `close` still notifies the server. The chunk landed on 2026-08-26 behind its
-  audit round and green gate chain; the probe package's lint stage rewire sits in the
-  probe repository's held round.
-- **The probe adoption.** The probe package's `LintStage` delegates spawn, framing,
-  correlation, and lifecycle to this package (installed as a packed tarball until the
-  registry serves a release). Its remaining red rows close when the inspection bound
-  split lands.
+- **The inspection bound split** (`231eb37`): the first real consumer falsified one
+  conflation — `LSPClientOptions.timeout` bounded the client's lifecycle requests and
+  the diagnostics wait alike, so a consumer whose inspection budget belongs to its own
+  caller could not bound teardown tightly without preempting that caller. The design
+  round ruled on 2026-08-26 (see `.orkestrel/lsp/l6-design-reconciliation.md`): `open`
+  takes a required options bag whose `AbortSignal` is required, the signal reaches the
+  pushed publication wait and the pulled diagnostic request alike, the client's
+  `timeout` keeps only the lifecycle and settlement bounds, and an aborted open leaves
+  the URI owned so `close` still notifies the server. The chunk landed behind a
+  two-lane audit, the L6.1 fix, a PASS re-check, and a green gate chain.
+- **The first consumer** (`orkestrel/probe` at `42e0b1e`): the probe package's
+  `LintStage` delegates spawn, framing, correlation, and lifecycle to this package,
+  installed as a packed tarball until the registry serves a release. Its round carries
+  the adoption, the inspection-bound rewire, and the progress-gauge restore, accepted
+  after an objective re-check returned PASS on every claim.
 
 ## Where the work sits, 2026-08-26
 
-This repository lives on `main` and carries the campaign record under `.orkestrel/`. The
-following table names the fleet repositories the campaign touches and the branch to pick each
-one up on.
+This repository lives on `main` and carries the whole campaign record under
+`.orkestrel/`. Start a resumed session at `.orkestrel/campaign/state.md` — it is the
+pickup record, and it names every held tree, every queued unit, and every ruling a unit
+needs. The following table names the fleet repositories the campaign touches and the
+branch to pick each one up on.
 
-| Repository           | Branch                         | State                                                                                                                                                                                                                                                               |
-| -------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `orkestrel/mcp`      | `claude/lsp-spec-audit-est33d` | Committed and pushed through `b50520a` with the subscription wave accepted. The tasks-proof design round runs from `.orkestrel/mcp/m4-tasks-design-brief.md` with the staged stable `2026-07-28` extension schema beside it.                                        |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | The provenance round is held uncommitted with every writing unit landed — types, coordinates, threading, rewrite, handle, guide, and the assert-helper fix — and commits as one after its audit round and gate chain. The record sits under `.orkestrel/markdown/`. |
-| `orkestrel/probe`    | `claude/lsp-spec-audit-est33d` | The adoption and the deadline-signal rewire are held uncommitted, with this package installed as a packed tarball recorded in `.orkestrel/probe/p1-tarball-swap.sh`. The gauge-restore fix unit runs; the round commits after its re-check and gate chain.          |
-| `orkestrel/html`     | `claude/lsp-spec-audit-est33d` | Accepted and pushed — span provenance on the parse surface.                                                                                                                                                                                                         |
-| `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | Accepted and pushed — progress reshaped to the mcp pattern with `unit` removed.                                                                                                                                                                                     |
+| Repository           | Branch                         | State                                                                                                                                                                                                                                                                  |
+| -------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orkestrel/mcp`      | `claude/lsp-spec-audit-est33d` | The tasks wave is mid-implementation. The design round is reconciled in `.orkestrel/mcp/m4-design-reconciliation.md`; the era sweep and the contract surface have landed with their falsified-row patches, and the mirror, stream, proof, and guide units are queued.  |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | The provenance round is written and its audit FAILED. `.orkestrel/markdown/h2-audit-reconciliation.md` rules the findings and cuts a four-unit fix round: the derivation-chain and boundary repairs, the contract prose, the executed fences, and the mechanical pass. |
+| `orkestrel/probe`    | `claude/lsp-spec-audit-est33d` | Accepted and pushed — the lsp adoption, the inspection-bound rewire, and the gauge restore, with this package installed as a packed tarball recorded in `.orkestrel/probe/p1-tarball-swap.sh`. `P2` (the `Issue` range) is the next unit.                              |
+| `orkestrel/html`     | `claude/lsp-spec-audit-est33d` | Accepted and pushed — span provenance on the parse surface.                                                                                                                                                                                                            |
+| `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | Accepted and pushed — progress reshaped to the mcp pattern with `unit` removed.                                                                                                                                                                                        |
+| `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | Accepted and pushed — the vendored lint exclusion for the campaign archive. A release bump is registered for its moved vendored surface.                                                                                                                               |
+
+## The campaign's end, and how a resumed session reaches it
+
+The LSP audit that opened this campaign covered ten repositories. What remains before
+it closes, in the order a resumed session takes it:
+
+1. **Finish the mcp tasks wave (M4).** The mirror, stream, proof, guide, and gate units
+   in `.orkestrel/mcp/m4-design-reconciliation.md`, then the round's two-lane audit and
+   one commit.
+2. **Finish the markdown provenance round (H2).** The four fix units in
+   `.orkestrel/markdown/h2-audit-reconciliation.md`, each audited by an engine that did
+   not write it, then one commit.
+3. **Close the remaining mcp waves.** M5 (the deprecated surface) and M6 (the naming
+   cascade), where M6 needs the user's blessing before any rename lands.
+4. **Close the probe wave.** P2 replaces `Issue.line` with a zero-based `range`; P3
+   (the `@typescript/native-preview` conformance reading) stays deferred pending the
+   user's install approval.
+5. **Close this package's own remaining work**, listed under Next.
+6. **Release.** Publishing is the user's decision and credential, run in layer order
+   through the `orkestrel-publish` skill.
 
 ## Next
 
