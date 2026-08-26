@@ -139,3 +139,35 @@ add a Grok INSURANCE lane beside it — with lower confidence than Opus. Applica
 | `p2-insurance` | `grok` insurance evidence sweep | Cursor Grok (bridge, model `cursor-grok-4.6-high`) | Returned with the `stacks` population trace; distillate retained verbatim in `probe/p2-insurance-distillate.md`. Journal swept at acceptance. A duplicate earlier exec produced no output and no tree change; recorded and discarded. |
 | P2 reconciliation | Orchestrator | — | ACCEPTED per `probe/p2-audit-2-verdict.md`: the objective verdict's confirmations, the settling measurement, and the insurance corroboration agree; the frame-basis residue is registered in the state's carried-capabilities list. |
 | P2 commit | Orchestrator | — | Landed and pushed as probe `1db0372`, the round's single commit behind the green chain. The probe tree is clean and its `tmp/codex` and `tmp/cursor` streams are swept, durable counterparts retained under `.orkestrel/probe/`. |
+
+## User correction, 2026-08-26: Grok INSTEAD of Sol, not insurance
+
+The user corrected the earlier ruling (autocorrect had produced "insurance"): while the
+Sol model is dark, **Grok takes the objective lane in Sol's place**, and Opus carries the
+higher confidence because the user trusts Grok less. Application, superseding the
+insurance section:
+
+- The objective audit lane dispatches through the `grok` driver with the round's
+  falsification brief. Grok returns per-claim verdict-shaped evidence; the campaign
+  treats every Grok verdict as lower-confidence.
+- Opus holds the subjective lane natively, unchanged.
+- At reconciliation the Opus and source readings carry the higher prior: a Grok `BROKEN`
+  is accepted only after the Orchestrator confirms it against source (a probe where one
+  can run); a Grok `CONFIRMED` on a load-bearing claim gets an Orchestrator spot-check
+  before acceptance.
+- The cross-engine law is restored for Opus-written units: their objective auditor is no
+  longer their own engine.
+- Rounds already reconciled under the earlier reading (p2-audit-2, h2-round2 objective)
+  stand; the correction governs lanes dispatched from here on.
+
+## Routing rows at the M4 audit and h2.3.2 boundary, 2026-08-26
+
+| Unit | Role | Engine | Standing |
+|---|---|---|---|
+| `m4-audit-objective` | objective audit lane | Cursor Grok (in Sol's place, per the corrected ruling) | Returned FAIL, 1 broken; the Orchestrator's source confirmation sustained the `third argument` and `the same two` hits, reworded `no third flag`, and dropped on the record the citations with no match and the hits outside the population. Verdict and driver return in `mcp/m4-audit-objective-verdict.md`. |
+| `m4-audit-reviewer` | subjective audit lane | Opus 5 (native) | Returned FAIL, 1 broken, 5 findings outside the claims. Verdict in `mcp/m4-audit-reviewer-verdict.md`. |
+| `m4-audit-checker` | `checker` | Sonnet (native) | Returned; the scope mismatches dissolve against the successor briefs it was not supplied, and the membership gap reconciles through the `DetailedTask` variant projection. Report persisted by the Orchestrator (the read-only role writes no file). |
+| `m4-r1-probe` | Orchestrator instrument | — | The digest row's reachability settled: a drifted mirror fails collection with the named drift error before any row runs; restore reads `42 passed (42)`. Instrument retained as `mcp/m4-r1-probe.sh`. |
+| `m4.1-repairs` | `implementer` | Opus 5 (native) | In flight from `c2a35d4`, carrying the round reconciliation's finding list. Auditor on return: `checker` plus the Orchestrator's gate re-run. |
+| `h2.3.2-prose` | `implementer` | Opus 5 (native) | Landed at markdown `c6b48f6`; Orchestrator re-ran check, `src:core`, and guides green. The unit surfaced the pre-existing `guides/markdown.md` oxfmt red (the Methods table), carried by `h2.4-mechanical`. Dispatch slip recorded: the brief's named review-verdict file landed on disk moments after the dispatch, so the unit correctly proceeded on the brief's self-contained restatements. |
+| `h2.4-mechanical` | `builder` | Sonnet (native) | In flight from `c6b48f6`: the R6 derivation and rename, the R5 scan-leaf TSDoc, and the format re-pad. Auditor on return: `checker`. |

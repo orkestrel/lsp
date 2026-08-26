@@ -32,8 +32,8 @@ known open unit, not a regression to diagnose.
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
 | `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `c51d7ce` | Accepted and pushed. The vendored lint exclusion for the campaign archive and the bench write-root rule in the host inventory's orchestration contract, with the inventory digests regenerated. A release bump is registered for that moved vendored surface; every target re-pins and runs `repair` after it publishes. |
-| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `c2a35d4` | **CHECKPOINTED, mid-round.** Everything through `m4-guide` is committed and pushed: the guides parity red row closed (`144 passed (144)`), the era sweep's guide half landed, the delivery rulings documented. `m4-gates` (verifier) is in flight; the round audit follows. See the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `bda6e1e` | **CHECKPOINTED, fix round running.** Through `h2.3.1-rows`: the round-two objective audit's broken findings closed as executed rows (the cascade discriminating fixture, the bridging rows, the `scanInlineSource` move, the trailing-space row), Orchestrator-verified `602 passed (602)`. The subjective `reviewer` lane is in flight per the second-lane trigger; `h2.4-mechanical` and `h2.5-gates` follow it. See the H2 section. |
+| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `c2a35d4` | **AUDITED, fix unit in flight.** Every M4 unit landed and `m4-gates` read the whole chain green (`1151 passed | 1 skipped`, conformance `42`, guides `144`). The round audit ran on the substituted lanes and returned FAIL on both, reconciled in `mcp/m4-round-audit-verdict.md`; `m4.1-repairs` (Opus) is in flight carrying the finding list. See the M4 section. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `c6b48f6` | **CHECKPOINTED, fix round closing.** Through `h2.3.2-prose`: the round-two objective audit's findings closed as executed rows at `bda6e1e`, and the subjective review's voice findings closed as prose at `c6b48f6`. `h2.4-mechanical` is in flight (R6, the R5 scan-leaf TSDoc, and the pre-existing guide oxfmt red its checkpoint message names); `h2.5-gates` and acceptance follow. See the H2 section. |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | G1 commits | **G1 ACCEPTED.** Each guide records why its package stays untouched by the progress work, landed by parallel `builder` units, ruled PASS on every claim by the `checker` (`campaign/g1-check-verdict.md`), committed and pushed. |
 
 ## Wave status
@@ -141,11 +141,12 @@ separate subagents, clean contexts, blind, each told its perspective — until t
 Sol access. Each substituted lane is named in the routing ledger. Re-probe at dispatch, not from
 this snapshot.
 
-**User ruling, 2026-08-26:** while Sol is dark, a Grok INSURANCE evidence sweep runs beside the
-Opus audit lane on nontrivial rounds — evidence with `file:line` pointers only, never a verdict,
-launched blind to the Opus lane. The Orchestrator reconciles with the Opus reading carrying the
-higher prior; Grok evidence alone never overturns an Opus verdict without a source-level
-confirmation. The full application is in the routing ledger beside this file.
+**User ruling, corrected 2026-08-26:** while Sol is dark, **Grok takes the objective audit lane
+in Sol's place** (the earlier "insurance" wording was an autocorrect artifact), and the Opus and
+source readings carry the higher prior at reconciliation: a Grok `BROKEN` is accepted only after
+source-level confirmation, and a Grok `CONFIRMED` on a load-bearing claim gets an Orchestrator
+spot-check. Opus holds the subjective lane natively. Rounds reconciled before the correction
+stand. The full application is in the routing ledger beside this file.
 
 One Sol lane at a time through `codex exec` script files written in the session scratchpad,
 journals under `tmp/codex/` in THIS repository, one Monitor per exec filtered to milestones and
