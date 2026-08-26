@@ -357,6 +357,7 @@ The constant surface provides these protocol names and limits:
 | -------------------------- | ----- | ------------------------------------------------------------- |
 | `LSP_METHODS`              | const | Names the protocol methods that the client sends or consumes. |
 | `LSP_ENCODINGS`            | const | Lists protocol position encodings.                            |
+| `LSP_TIMEOUT`              | const | Names the default request-settlement timeout in milliseconds. |
 | `JSONRPC_PARSE_ERROR`      | const | Identifies a malformed JSON payload.                          |
 | `JSONRPC_INVALID_REQUEST`  | const | Identifies a structurally invalid request.                    |
 | `JSONRPC_METHOD_NOT_FOUND` | const | Identifies an unsupported method.                             |

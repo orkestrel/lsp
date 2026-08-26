@@ -14,6 +14,9 @@ export const LSP_METHODS = Object.freeze({
 /** Lists the position encodings named by Language Server Protocol 3.18. */
 export const LSP_ENCODINGS = Object.freeze(['utf-8', 'utf-16', 'utf-32'] as const)
 
+/** Names the default request-settlement timeout in milliseconds. */
+export const LSP_TIMEOUT = 30_000
+
 /** Identifies a malformed JSON payload. */
 export const JSONRPC_PARSE_ERROR = -32700
 

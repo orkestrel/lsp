@@ -261,3 +261,28 @@ examined (`roots`, `sampling`, `logging`) model the vendor's wire shapes for the
 revisions this package deliberately serves — the special case the user named — so they
 stay as live vendor-legacy surface, not as our deprecated work. M5's closure is unchanged
 under the sharpened ruling.
+
+## The M6 landing and the fallback-sentence ruling, 2026-08-26
+
+The m6-naming unit (Opus implementer, `/home/user/mcp`, baseline `11c879c`) landed the
+ruled cascade in one change: the four renames across `src/`, `tests/` minus
+`tests/mirrors/`, and `guides/mcp.md`, the `MCPLegacy` family untouched,
+`MCP_PROTOCOL_VERSION_HEADER` untouched, no alias, re-export, or deprecation tag. The
+Orchestrator re-measured before commit: a word-boundary grep for each old spelling over
+that population reads zero, the header resolves at `src/server/constants.ts:27` and
+`src/browser/constants.ts:22`, and `check`, `format:check`, `lint:check`, guides
+`144 passed`, and conformance `42 passed` each exit 0 under the Orchestrator's own runs.
+
+The unit flagged two claims. The site-table completeness claim closes on the
+Orchestrator's independent zero-residual grep, which bounds the population regardless of
+the brief's sampling. The `MCP_FALLBACK_VERSION` TSDoc claim is ruled a false prose
+claim: the sentence assigned the constant the unsupported-revision fallback role, and the
+code gives that role to `MCP_HANDSHAKE_VERSION` in `inferLegacyVersion`
+(`src/server/inferers.ts`) and `buildInitializeResult` (`src/core/helpers.ts`); the
+constant's only source consumer is `SUPPORTED_LEGACY_PROTOCOL_VERSIONS`, and the guide
+already states the true role at its own sites. The Orchestrator repaired the one sentence
+directly — "The older legacy revision the optional legacy decorator accepts and an
+adapter can pin." — validated it scoped (format, lint, `check`, each exit 0), and hands
+it to the m6 checker as its own numbered claim. The ruled name stays: the constant names
+the era's trailing revision, the guide reads true against it, and reopening a name the
+delegated ruling fixed is a rescope, not an auditor's finding.

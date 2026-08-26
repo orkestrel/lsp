@@ -23,7 +23,7 @@ import type {
 	LSPTransportInterface,
 } from './types.js'
 import { Emitter } from '@orkestrel/emitter'
-import { JSONRPC_METHOD_NOT_FOUND, LSP_METHODS } from './constants.js'
+import { JSONRPC_METHOD_NOT_FOUND, LSP_METHODS, LSP_TIMEOUT } from './constants.js'
 import { LSPError, isLSPError } from './errors.js'
 import { encodeLSPMessage } from './helpers.js'
 import { parseLSPMessages } from './parsers.js'
@@ -110,7 +110,7 @@ export class LSPClient implements LSPClientInterface {
 		})
 		this.#transport = options.transport
 		this.#workspace = options.workspace
-		this.#timeout = options.timeout ?? 30_000
+		this.#timeout = options.timeout ?? LSP_TIMEOUT
 		this.#signal = options.signal
 		this.#abort = options.signal === undefined ? undefined : this.#abortClient.bind(this)
 		this.#chunk = this.#receiveChunk.bind(this)

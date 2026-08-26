@@ -1,5 +1,6 @@
 import type { Guard } from '@orkestrel/contract'
 import type { LSPDiagnosticSeverity, LSPDiagnosticTag, LSPTextDocumentSyncKind } from '@src/core'
+import type { Diagnostic as InstalledDiagnostic } from 'vscode-languageserver-protocol'
 import {
 	JSONRPC_INTERNAL_ERROR,
 	JSONRPC_INVALID_PARAMS,
@@ -541,7 +542,7 @@ export function readForbiddenSource(root: string): string | undefined {
  * @param value - The candidate diagnostic to check.
  * @returns True if the installed guards accept the value as a 3.17 string-message diagnostic; false otherwise.
  */
-export function isInstalledDiagnostic(value: unknown): value is unknown {
+export function isInstalledDiagnostic(value: unknown): value is InstalledDiagnostic {
 	return Diagnostic.is(value) && Diagnostic.is3_17(value)
 }
 
