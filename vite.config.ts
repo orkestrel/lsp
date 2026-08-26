@@ -130,6 +130,17 @@ export const config = (): UserConfig => ({
 	},
 })
 
+export const conformance = (): UserConfig => ({
+	resolve,
+	test: {
+		name: { label: 'conformance', color: 'blue' },
+		include: ['tests/conformance.test.ts'],
+		setupFiles: ['./tests/setup.ts'],
+		environment: 'node',
+		browser: { enabled: false },
+	},
+})
+
 export const distribution = (): UserConfig => ({
 	resolve,
 	test: {
@@ -165,6 +176,6 @@ export const probe = (): UserConfig => ({
 export default defineConfig({
 	resolve,
 	test: {
-		projects: [srcCore, srcServer, policy, setup, config, distribution, probe],
+		projects: [srcCore, srcServer, policy, setup, config, conformance, distribution, probe],
 	},
 })
