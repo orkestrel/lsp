@@ -17,5 +17,5 @@
   - Guide: [`guides/lsp.md`](lsp.md)
   - Tests: [`tests/src/core`](../tests/src/core)
 - [`src/server`](../src/server)
-  - Guide: [`guides/lsp.md`](lsp.md)
+  - Guide: [`guides/lsp.md`](lsp.md#stdio-transport)
   - Tests: [`tests/src/server`](../tests/src/server)

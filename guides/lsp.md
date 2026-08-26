@@ -46,6 +46,46 @@ during teardown. A close failure that settles before the deadline is emitted bef
 destroys its emitter. At the deadline, the client emits an `LSPError` coded `timeout` and absorbs
 the later close outcome.
 
+## Stdio transport
+
+The server environment publishes `StdioTransport`, the byte transport over a language server run as
+a child process. It carries bytes and never frames: every standard-output chunk reaches the `chunk`
+event exactly as the host delivered it, so a frame split across reads and two frames coalesced into
+one read both arrive unaltered and the client's parser owns the framing. Standard error is drained
+so a chatty server can't fill its pipe and stall.
+
+`server.command` is the child's argument vector: its first element names the executable and the rest
+are its arguments, so a launcher and its target stay one value and no shell splits them.
+`server.directory` is the child's working directory, and `server.environment` is its complete
+environment; the current directory and this process's environment apply when either is absent.
+
+```ts
+import { createLSPClient } from '@orkestrel/lsp'
+import { createStdioTransport } from '@orkestrel/lsp/server'
+
+const transport = createStdioTransport({
+	server: { command: ['my-language-server', '--stdio'], directory: '/workspace' },
+	grace: 5_000,
+})
+const client = createLSPClient({ transport, workspace: 'file:///workspace' })
+await client.start()
+await client.destroy()
+```
+
+`grace` bounds the cooperative termination window in milliseconds, and `5000` applies when it is
+absent. Closing ends the child's input stream, waits `grace` for the child's own exit, and hands a
+child that outlives that window to the process package's `stopChild` helper, which signals it, waits
+`grace` again, and escalates to an unconditional kill. The child stays in the parent's process group
+rather than leading its own, so that helper reaches it through a direct signal after the host reports
+that no group owns its identifier. The `exit` event carries the code and signal the host reported.
+
+The transport reconnects. After `close()` resolves, or after the child exits on its own and the
+transport emits `exit`, a further `start()` call spawns a fresh child. A `start()` call made while a
+child is still live is refused with an `LSPError` whose `code` property is `duplicate`. An empty
+command, a host that refuses the spawn, and a child that reports a spawn fault each reject `start()`
+with one coded `spawn`. `send()` resolves `false` before the first `start()`, after `close()`
+resolves, and after the child exits.
+
 ## Framing state
 
 Use `parseLSPMessages()` with the preceding `LSPDecodeState` value to decode split or coalesced
@@ -76,7 +116,25 @@ The transport interface exposes these behavioral methods:
 | `send`  | `send(bytes: Uint8Array): Promise<boolean>` | Sends bytes and reports whether the transport accepted them. |
 | `close` | `close(): Promise<void>`                    | Closes the active transport generation.                      |
 
+### `StdioTransport`
+
+The stdio transport exposes exactly the `LSPTransportInterface` methods, with these behaviors:
+
+| Method  | Signature                                   | Behavior                                                                     |
+| ------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `start` | `start(): Promise<void>`                    | Spawns the configured child and resolves after the host reports it spawned.  |
+| `send`  | `send(bytes: Uint8Array): Promise<boolean>` | Writes bytes to the child's standard input and reports whether it took them. |
+| `close` | `close(): Promise<void>`                    | Ends the child cooperatively, then kills it after the grace window.          |
+
 ## Surface
+
+The server surface provides these exports:
+
+| Export                  | Purpose                                                                   |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `StdioTransport`        | Implements the byte transport over a language server child process.       |
+| `createStdioTransport`  | Creates an `LSPTransportInterface` from `StdioTransportOptions`.          |
+| `StdioTransportOptions` | Configures the child's command, directory, environment, and grace window. |
 
 The client surface provides these entities and configuration contracts:
 
