@@ -119,3 +119,23 @@ add a Grok INSURANCE lane beside it — with lower confidence than Opus. Applica
 | Unit | Role | Engine | Standing |
 |---|---|---|---|
 | `p2-insurance` | `grok` insurance evidence sweep | Cursor Grok (bridge) | Dispatched over the held probe tree, blind to the `p2-audit-2` lane, per this ruling. |
+
+## Routing rows added at the m4-guide, h2.3.1, and p2-gates boundary, 2026-08-26
+
+| Unit | Role | Engine | Standing |
+|---|---|---|---|
+| `m4-guide` | `implementer` | Opus 5 (native) | Landed at mcp `c2a35d4`; Orchestrator re-ran the gates after the writer exited: six symbols present, no draft-era hit, oxfmt check exit 0, `test:guides` `144 passed (144)` exit 0. Carried finding: a banned `simply` on the untouched `guides/mcp.md:325`; carrier: the M4 round-audit reconciliation. |
+| `p2-settle` | Orchestrator instrument | — | The audit's unresolved claim settled: raw frame beside stored range, one-based both halves at column 16 and at the column floor. Receipts and instrument in `.orkestrel/probe/`. |
+| p2 acceptance gates | Orchestrator tracked command | — | `format:check` 0, `lint:check` 0, `check` 0, `build` 0, `npm test` 0 with every project passing (`213`, `93`, `46`, `3`, `13`). The P2 commit follows the reconciliation with the Grok insurance distillate. |
+| `h2.3.1-rows` | `builder` | Sonnet (native) | Landed at markdown `bda6e1e`; Orchestrator re-ran the gates after the writer exited: `src:core` `602 passed (602)` exit 0, `scanInlineSource` absent from `parsers.test.ts`, the cascade discriminating fixture present. Closes both broken claims and the outside finding of the round-two objective verdict. Re-baseline: this unit was allocated `tests/src/core/helpers.test.ts`, the carrier the audit found unallocated. |
+| `m4-gates` | `verifier` | Sonnet (native) | In flight over mcp at `c2a35d4`: the authoritative whole-tree gate chain. |
+| `h2-round2-review` | `reviewer`, subjective lane | Opus 5 (native) | In flight over markdown at `bda6e1e`, launched because the round's objective lane returned FAIL, per the audit step's second-lane trigger. Blind to the objective verdict: its evidence slice excludes the verdict file. |
+| `p2-insurance` | `grok` insurance evidence sweep | Cursor Grok (bridge) | In flight: the installed-Vitest `stacks` population trace. Reconciles into the P2 acceptance with the Opus reading carrying the higher prior. |
+
+## The P2 acceptance, 2026-08-26
+
+| Unit | Role | Engine | Standing |
+|---|---|---|---|
+| `p2-insurance` | `grok` insurance evidence sweep | Cursor Grok (bridge, model `cursor-grok-4.6-high`) | Returned with the `stacks` population trace; distillate retained verbatim in `probe/p2-insurance-distillate.md`. Journal swept at acceptance. A duplicate earlier exec produced no output and no tree change; recorded and discarded. |
+| P2 reconciliation | Orchestrator | — | ACCEPTED per `probe/p2-audit-2-verdict.md`: the objective verdict's confirmations, the settling measurement, and the insurance corroboration agree; the frame-basis residue is registered in the state's carried-capabilities list. |
+| P2 commit | Orchestrator | — | Landed and pushed as probe `1db0372`, the round's single commit behind the green chain. The probe tree is clean and its `tmp/codex` and `tmp/cursor` streams are swept, durable counterparts retained under `.orkestrel/probe/`. |

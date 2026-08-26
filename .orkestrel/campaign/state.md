@@ -28,12 +28,12 @@ known open unit, not a regression to diagnose.
 | Repository | Branch | Head | Standing |
 |---|---|---|---|
 | `orkestrel/lsp` | `main` | `3b8f019` and later | The campaign's subject and its record. L2 through L6 accepted; the campaign archive lives here under `.orkestrel/`. |
-| `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `42e0b1e` | P round accepted and pushed. **P2 held uncommitted on top:** the `Issue.range` adoption with red-first proofs across the producers and the renderer. The objective audit lane is IN FLIGHT on Opus 5, substituted for the dark Sol model per § Bench and lane discipline; the P2 commit follows its verdict behind the green chain. Brief: `lsp/tmp/units/p2-audit-2-brief.md`, superseding the never-delivered bench brief. |
+| `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `1db0372` | **P2 ACCEPTED and pushed.** The `Issue.range` adoption landed as one commit behind the green chain, after the substituted Opus objective audit, the Orchestrator's settling measurement, and the Grok insurance corroboration (`probe/p2-audit-2-verdict.md`). The probe tree's ephemeral streams are swept. P3 stays deferred pending the user's install approval. |
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
 | `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `c51d7ce` | Accepted and pushed. The vendored lint exclusion for the campaign archive and the bench write-root rule in the host inventory's orchestration contract, with the inventory digests regenerated. A release bump is registered for that moved vendored surface; every target re-pins and runs `repair` after it publishes. |
-| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `0fe1879` | **CHECKPOINTED, mid-round.** Everything through `m4-stream` plus the `m4-proof` invariants (the W03-B rows, mutation-bound, Orchestrator-verified `596 passed (596)`) is committed and pushed. The guides parity red row stands by design for `m4-guide`, which runs next. See the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `e5876ff` | **CHECKPOINTED, fix round running.** Through `h2.3-fences`: every § Source provenance fence reading executes as a named row, Orchestrator-verified `599 passed (599)`, committed and pushed. The round's objective audit (also covering the `h2.2.1` corrections) runs next on the substituted Opus lane, then `h2.4-mechanical` and `h2.5-gates`. See the H2 section. |
+| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `c2a35d4` | **CHECKPOINTED, mid-round.** Everything through `m4-guide` is committed and pushed: the guides parity red row closed (`144 passed (144)`), the era sweep's guide half landed, the delivery rulings documented. `m4-gates` (verifier) is in flight; the round audit follows. See the M4 section. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `bda6e1e` | **CHECKPOINTED, fix round running.** Through `h2.3.1-rows`: the round-two objective audit's broken findings closed as executed rows (the cascade discriminating fixture, the bridging rows, the `scanInlineSource` move, the trailing-space row), Orchestrator-verified `602 passed (602)`. The subjective `reviewer` lane is in flight per the second-lane trigger; `h2.4-mechanical` and `h2.5-gates` follow it. See the H2 section. |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | G1 commits | **G1 ACCEPTED.** Each guide records why its package stays untouched by the progress work, landed by parallel `builder` units, ruled PASS on every claim by the `checker` (`campaign/g1-check-verdict.md`), committed and pushed. |
 
 ## Wave status
@@ -42,7 +42,7 @@ known open unit, not a regression to diagnose.
 |---|---|---|
 | W — workflow | Progress adopted in the mcp shape, `unit` removed | Accepted and pushed |
 | L — lsp | The package: contract, codec, client, transport, conformance, the open-bound split | L2 through L5 accepted through `c1f5cea`; L6 landed as one commit `231eb37` behind its audit round, the L6.1 fix, a PASS re-check, and a green chain (conformance 243). The package is green on `main`. |
-| P — probe | Adopts `@orkestrel/lsp` | P1 closed at `42e0b1e`. **P2 (`Issue.range`) held uncommitted with its objective audit in flight** on the substituted Opus lane; the commit follows the verdict. P3 (`@typescript/native-preview`) stays deferred pending the user's install approval. |
+| P — probe | Adopts `@orkestrel/lsp` | P1 closed at `42e0b1e`; **P2 accepted at `1db0372`** behind the audit, the settling measurement, the insurance corroboration, and the green chain. P3 (`@typescript/native-preview`) stays deferred pending the user's install approval, and is the P wave's only open item. |
 | H — html and markdown | Provenance | html accepted through `a533947`. markdown's fix round is through `h2.3-fences` (checkpointed at `e5876ff`); the round's objective audit runs next on the substituted Opus lane, then `h2.4-mechanical` and `h2.5-gates`. |
 | M — mcp | Era 2026-07-28 native, repairs, subscriptions, the tasks family | M3 accepted through `b50520a`. M4 is through `m4-proof` (checkpointed at `0fe1879`); `m4-guide` runs next, then `m4-gates` and the round audit. M5 (deprecated surface) and M6 (naming cascade, needs the user's blessing) follow. |
 
@@ -173,7 +173,10 @@ ran beside each other.
 
 ## Registered capabilities, carried not scheduled
 
-The inert `.oxlintignore` under oxlint 1.80.0 (it reads `.eslintignore`; the rc `ignorePatterns`
+The RuntimeStage frame-basis dependence on Vitest's un-remapped stacks (a Vitest change routing
+the stage's frames through its source-map remap flips the column basis; the guard chain refuses
+it loudly, and `probe/p2-settle-instrument.sh` re-produces the detecting measurement); the inert
+`.oxlintignore` under oxlint 1.80.0 (it reads `.eslintignore`; the rc `ignorePatterns`
 carries the exclusion instead — wire `--ignore-path` or retire the file in a fleet alignment
 pass); `#cancelRequest` single-caller and `#releaseGeneration` delegate (lsp client, next
 change); the fleet-wide guides-execution gap (a parity drop-in that resolves names but executes
