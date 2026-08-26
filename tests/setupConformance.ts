@@ -199,12 +199,17 @@ export const WORKSPACE_LOCK_PATH = resolve(WORKSPACE_PATH, 'package-lock.json')
  * Formats a value for a direct conformance failure.
  *
  * @param value - The authoritative value to render.
- * @returns The string itself, its JSON form, or `undefined` spelled out.
+ * @returns The string itself, its JSON form, or the value's `String` form when it has neither.
  */
 export function formatConformanceValue(value: unknown): string {
 	if (value === undefined) return 'undefined'
 	if (typeof value === 'string') return value
-	const serialized = JSON.stringify(value)
+	let serialized: string | undefined
+	try {
+		serialized = JSON.stringify(value)
+	} catch {
+		serialized = undefined
+	}
 	return serialized === undefined ? String(value) : serialized
 }
 

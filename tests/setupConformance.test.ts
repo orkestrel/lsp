@@ -3,6 +3,7 @@ import {
 	META_MODEL_DIGEST,
 	META_MODEL_PATH,
 	formatConformanceDrift,
+	formatConformanceValue,
 	readConformanceDrift,
 	readEnumeration,
 	readForbiddenImport,
@@ -62,6 +63,10 @@ describe('conformance infrastructure', () => {
 		expect(formatConformanceDrift('LSPPosition.column', 'Position.column', property)).toBe(
 			'LSPPosition.column drifted; Position.column=undefined',
 		)
+	})
+
+	it('formats a value JSON.stringify cannot serialize through String(value)', () => {
+		expect(formatConformanceValue(9007199254740993n)).toBe('9007199254740993')
 	})
 
 	it('refuses a byte-perturbed mirror copy before parsing', () => {
