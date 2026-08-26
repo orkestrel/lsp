@@ -7,6 +7,17 @@ state, gate results, bench liveness — rather than trusting this snapshot as cu
 `ROADMAP.md` file in this repository carries the product-facing overview of the lsp package, the
 campaign's main subject.
 
+## Mid-round checkpoints, and how to read one
+
+A round normally commits as ONE commit behind one green gate chain. A container reclaim
+destroys an uncommitted working tree, so a session boundary overrides that: the work commits as
+a **checkpoint** whose message says so, names every red row and the exact reason, and names the
+queued unit that closes it. A checkpoint is not an acceptance. The round's audit still runs, its
+fix units still run, and its acceptance is a later commit.
+
+Read a checkpoint's message before judging the tree it left. A red row a checkpoint names is a
+known open unit, not a regression to diagnose.
+
 ## Where every repository sits
 
 | Repository | Branch | Head | Standing |
@@ -16,8 +27,8 @@ campaign's main subject.
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
 | `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `8c3a787` | Accepted and pushed. The vendored lint exclusion for the campaign archive; a release bump is registered for it. |
-| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `b50520a` | **HELD, mid-round.** The M4 tasks wave is uncommitted in the tree; see the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `f77063c` | **HELD, mid-round.** The whole H2 provenance round is uncommitted and its audit returned FAIL; see the H2 section. |
+| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `f1632ad` | **CHECKPOINTED, mid-round.** The era sweep and the contract surface are committed and pushed. One red row stands by design: the guides parity project's `documents every barrel export` names the six symbols the contract added, and the queued `m4-guide` unit closes it. See the M4 section. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | see the H2 section | **CHECKPOINTED, mid-round, audit FAILED.** The whole H2 provenance round plus its first fix unit are committed; the remaining fix units are queued. See the H2 section. |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | lockfile commits | Clean and pushed. Not campaign subjects; they carry only the scaffold re-pin. |
 
 ## Wave status
@@ -54,7 +65,7 @@ Unit progress, serial:
 |---|---|
 | `m4-era` | **Landed** in the tree. Prose only — every draft-era claim replaced with the stable `2026-07-28` snapshot fact across source and tests. Gates green at the time it ran. Record: `mcp/m4-era-brief.md`, `-report.md`, `-diff.txt`, `-status.txt`. |
 | `m4-contract` | **Landed** in the tree with a scoped deviation. The whole surface and all four drift repairs are in, each red-first. Three rows in files the brief made off-limits became false; the unit returned exact patches rather than editing them. Record: `mcp/m4-contract-brief.md`, `-report.md`, `-diff.txt`, `-status.txt`. |
-| `m4-contract.1` | **Running** as a `builder` unit applying those three patches verbatim. Brief: `mcp/m4-contract.1-brief.md`. The mcp tree is RED until it lands — `check` exits 2 and `test:src:core` reports `770 passed, 2 failed`, and those three rows are the only cause. |
+| `m4-contract.1` | **Landed.** A `builder` unit applied those three patches verbatim; `check` and `test:src:core` returned to exit 0 with `772 passed`. Record: `mcp/m4-contract.1-brief.md`, `-report.md`. |
 | `m4-mirror` | Queued, Sol bench. Vendor `ext-tasks-2026-07-28-schema.json` byte-identical with its SHA-256 `bf30afb7ac251e3e22c037b7a685f60ef6603031b5484c0d08b1fa0bbe86d460` pinned, and build the comparison rows. |
 | `m4-stream` | Queued, Sol bench. The matcher branch, the guarded admission, the `tasks: boolean` parameter, the derived support fact, the authorize-and-omit acknowledgement. |
 | `m4-proof` | Queued, Opus native. A real fixture producer through `subscription.listen` reaching a real client stream, plus the question-2 invariants. |
@@ -64,6 +75,14 @@ Unit progress, serial:
 The audit routing for the round: `reviewer` (Opus) over the Sol-written `m4-mirror` and
 `m4-stream`, `analyst` (Sol) over the Opus-written units, `checker` over mirror membership and
 era-sweep completeness.
+
+**The checkpoint's one red row.** `npm run test:guides` reports `documents every barrel export`
+failing with the six symbols `m4-contract` added: the types `MCPNotificationMetaObject`,
+`MCPTaskDetailResult`, and `MCPTaskNotificationParams`, and the guards
+`isMCPNotificationMetaObject`, `isMCPTaskDetailResult`, and `isMCPTaskNotification`. The
+`m4-guide` unit documents them. Every other project is green: `src` reports `1143 passed`
+with one skipped, and `policy`, `config`, and `setup` all pass. `format:check`, `lint:check`,
+`check`, and `build` all exit 0.
 
 **The composing envelope stays undefined in every available source** (`mcp/m4-envelope-probe.md`
 records the search bound). The package documents `params.notifications.taskIds` as its reading
