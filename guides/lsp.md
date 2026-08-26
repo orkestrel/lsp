@@ -110,6 +110,14 @@ frames. Retained byte segments are owned copies, so caller mutation after parsin
 later continuation. The parser accepts unknown header fields and refuses malformed parameters in a
 known `Content-Type` field. Use `encodeLSPMessage()` to produce a byte-accurate frame.
 
+## Conformance
+
+This package tracks Language Server Protocol 3.18. The mirror at `tests/mirrors/metaModel.json`
+holds the protocol's metaModel instance as fetched bytes, refreshed by running
+`scripts/metamodel.sh`. The conformance proof covers the subset of the protocol this package
+speaks, and the diagnostic surface is the string-message form matching the client's advertised
+capability.
+
 ## Methods
 
 ### `LSPClientInterface`
