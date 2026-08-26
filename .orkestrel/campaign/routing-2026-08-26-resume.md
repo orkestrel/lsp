@@ -79,3 +79,14 @@ under the pre-fix sources, with the exact restore proven by an empty `git status
 
 Carried finding: the `Markdown.ts:27-28` class TSDoc over-claim from the `h2.2-prose` report is
 carried by the `h2.3-fences` brief, recorded in `state.md`'s H2 table.
+
+## Routing rows added at the m4-stream and h2.2.1-prose boundary
+
+| Unit | Role | Engine | Route and record |
+|---|---|---|---|
+| `m4-stream` acceptance | Orchestrator | — | Host re-verification after the bench run: the scoped helpers and MCPServer suites `310 passed`, tree-wide `format:check` exit 0. mcp checkpoint `bef9f40`. |
+| `h2.2.1-prose` | `implementer` | Opus 5 (native) | Landed; markdown checkpoint `e4c434c` with scoped gates green (`592 passed`, guides `18 passed`). Audit rides as added claims in the `h2.3-fences` Sol `analyst` round. |
+| `m4-proof` | `implementer` | Opus 5 (native) | In flight in mcp from the clean `bef9f40` baseline. Question-2 invariants plus the end-to-end producer-to-client proof, mutation-bound to the two landed sites. |
+| `h2.3-fences` | `implementer` | Opus 5 (native) | In flight in markdown from the clean `e4c434c` baseline. R4: the provenance fences transcribed into executed rows. |
+| `p2-range` deciding runs | Orchestrator | — | `npm run build` exit 0; `test:src` under load read one timing red (`Probe.test.ts` deadline fixture, concurrent with the `h2.2.1` writer); the same file alone reads `26 passed (26)` exit 0, so the load red is contention per the concurrency rule on timing failures. |
+| `p2-audit` | `analyst` | GPT-5.6 Sol (bench, read-only) | Launches on the free bench after a claim-5 correction: the staged brief demanded applied-and-reverted mutations of a read-only exec, so the Orchestrator re-runs every mutation-table row on the host as supplied executed evidence (`p2-audit-instrument.sh`) and the lane attacks the consistency of report, instrument readings, and source. |

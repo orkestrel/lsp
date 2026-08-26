@@ -1,0 +1,65 @@
+=== ROW renderer ===
+TARGET_OCCURRENCES:1 (src/core/helpers.ts :: range.start.line + 1)
+--- red run: npx vitest run --config vite.config.ts --no-cache --project src:core tests/src/core/helpers.test.ts
+RED_EXIT:1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected '[claimant] src/core/greeting.ts:0 not…' to be '[claimant] src/core/greeting.ts:1 not…' // Object.is equality
+AssertionError: expected '[claimant] src/core/greeting.ts:0 not…' to be '[claimant] src/core/greeting.ts:1 not…' // Object.is equality
+RESTORE_CMP_EXIT:0
+--- green run: npx vitest run --config vite.config.ts --no-cache --project src:core tests/src/core/helpers.test.ts
+GREEN_EXIT:0
+      Tests  16 passed (16)
+=== ROW typestage ===
+TARGET_OCCURRENCES:1 (src/server/stages/TypeStage.ts :: range: { start, end })
+--- red run: npx vitest run --config vite.config.ts --no-cache --project src:server tests/src/server/stages/TypeStage.test.ts -t stores a diagnostic zero-based
+RED_EXIT:1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 3 to be 2 // Object.is equality
+      Tests  1 failed | 22 skipped (23)
+RESTORE_CMP_EXIT:0
+--- green run: npx vitest run --config vite.config.ts --no-cache --project src:server tests/src/server/stages/TypeStage.test.ts -t stores a diagnostic zero-based
+GREEN_EXIT:0
+      Tests  1 passed | 22 skipped (23)
+=== ROW lintstage ===
+TARGET_OCCURRENCES:1 (src/server/stages/LintStage.ts :: line: diagnostic.range.start.line,)
+--- red run: npx vitest run --config vite.config.ts --no-cache --project src:server tests/src/server/stages/LintStage.test.ts -t stores a published span zero-based
+RED_EXIT:1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 3 to be 2 // Object.is equality
+      Tests  1 failed | 29 skipped (30)
+RESTORE_CMP_EXIT:0
+--- green run: npx vitest run --config vite.config.ts --no-cache --project src:server tests/src/server/stages/LintStage.test.ts -t stores a published span zero-based
+GREEN_EXIT:0
+      Tests  1 passed | 29 skipped (30)
+=== ROW runtimeline ===
+TARGET_OCCURRENCES:1 (src/server/stages/RuntimeStage.ts :: stack.line - 1)
+--- red run: npx vitest run --config vite.config.ts --no-cache --project src:server tests/src/server/stages/RuntimeStage.test.ts -t stores the reported frame zero-based
+RED_EXIT:1
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 6 to be 5 // Object.is equality
+      Tests  1 failed | 39 skipped (40)
+RESTORE_CMP_EXIT:0
+--- green run: npx vitest run --config vite.config.ts --no-cache --project src:server tests/src/server/stages/RuntimeStage.test.ts -t stores the reported frame zero-based
+GREEN_EXIT:0
+      Tests  1 passed | 39 skipped (40)
+=== FINAL TREE CHECK ===
+ M guides/probe.md
+ M src/core/helpers.ts
+ M src/core/types.ts
+ M src/core/validators.ts
+ M src/server/stages/LintStage.ts
+ M src/server/stages/RuntimeStage.ts
+ M src/server/stages/TypeStage.ts
+ M tests/src/core/helpers.test.ts
+ M tests/src/core/validators.test.ts
+ M tests/src/server/stages/LintStage.test.ts
+ M tests/src/server/stages/RuntimeStage.test.ts
+ M tests/src/server/stages/TypeStage.test.ts
+ src/core/helpers.ts               | 11 +++++++++--
+ src/core/types.ts                 | 24 +++++++++++++++++-------
+ src/core/validators.ts            |  5 +++--
+ src/server/stages/LintStage.ts    | 13 +++++++++++--
+ src/server/stages/RuntimeStage.ts |  8 +++++++-
+ src/server/stages/TypeStage.ts    | 11 +++++++++--
+ 6 files changed, 56 insertions(+), 16 deletions(-)
+INSTRUMENT_DONE
