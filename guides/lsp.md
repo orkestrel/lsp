@@ -113,10 +113,12 @@ known `Content-Type` field. Use `encodeLSPMessage()` to produce a byte-accurate 
 ## Conformance
 
 This package tracks Language Server Protocol 3.18. The mirror at `tests/mirrors/metaModel.json`
-holds the protocol's metaModel instance as fetched bytes, refreshed by running
-`scripts/metamodel.sh`. The conformance proof covers the subset of the protocol this package
-speaks, and the diagnostic surface is the string-message form matching the client's advertised
-capability.
+holds the protocol's metaModel instance as fetched bytes. Refresh the mirror by running
+`scripts/metamodel.sh`, which prints the fetched version and SHA-256. Update `META_MODEL_DIGEST`
+and `META_MODEL_VERSION` in `tests/setupConformance.ts` to the printed values in the same commit,
+so a mirror edited outside this procedure reddens the conformance run. The conformance proof covers
+the subset of the protocol this package speaks, and the diagnostic surface is the string-message
+form matching the client's advertised capability.
 
 ## Methods
 

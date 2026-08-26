@@ -1,3 +1,4 @@
+import * as core from '@src/core'
 import { LSP_ENCODINGS, LSP_METHODS } from '@src/core'
 import {
 	CONFORMANCE_DECLARED_RANGE,
@@ -49,6 +50,16 @@ describe('LSP method conformance', () => {
 })
 
 describe('LSP numeral conformance', () => {
+	it('covers every negative numeral the core barrel exports', () => {
+		expect(new Set(CONFORMANCE_NUMERALS.map((row) => row.symbol))).toStrictEqual(
+			new Set(
+				Object.entries(core)
+					.filter(([, value]) => typeof value === 'number' && value < 0)
+					.map(([name]) => name),
+			),
+		)
+	})
+
 	it.each(CONFORMANCE_NUMERALS)('$symbol matches the installed namespace', (row) => {
 		expect(readConformanceDrift(row.symbol, row.local, 'installed', row.installed)).toBeUndefined()
 	})
@@ -59,10 +70,14 @@ describe('LSP numeral conformance', () => {
 })
 
 describe('LSP value conformance', () => {
-	it('covers the declared LSP_ENCODINGS values without claiming string-enumeration closure', () => {
+	it('covers the declared LSP_ENCODINGS symbols without claiming string-enumeration closure', () => {
 		expect(
-			new Set(CONFORMANCE_VALUES.slice(0, LSP_ENCODINGS.length).map((row) => row.local)),
-		).toStrictEqual(new Set(LSP_ENCODINGS))
+			new Set(
+				CONFORMANCE_VALUES.filter((row) => row.symbol.startsWith('LSP_ENCODINGS.')).map(
+					(row) => row.symbol,
+				),
+			),
+		).toStrictEqual(new Set(LSP_ENCODINGS.map((encoding) => `LSP_ENCODINGS.${encoding}`)))
 	})
 
 	it.each(CONFORMANCE_VALUES)('$symbol matches the installed namespace', (row) => {
@@ -75,6 +90,73 @@ describe('LSP value conformance', () => {
 })
 
 describe('LSP structure conformance', () => {
+	it('covers exactly the projected structure members this package speaks', () => {
+		expect(new Set(CONFORMANCE_STRUCTURES.map((row) => row.symbol))).toStrictEqual(
+			new Set([
+				'LSPInitializeParams.processId',
+				'LSPInitializeParams.clientInfo',
+				'LSPInitializeParams.rootUri',
+				'LSPInitializeParams.capabilities',
+				'LSPClientCapabilities.general',
+				'LSPClientCapabilities.textDocument',
+				'LSPClientCapabilities.general.positionEncodings',
+				'LSPClientCapabilities.textDocument.synchronization',
+				'LSPClientCapabilities.textDocument.publishDiagnostics',
+				'LSPClientCapabilities.textDocument.diagnostic',
+				'LSPInitializeResult.capabilities',
+				'LSPInitializeResult.serverInfo',
+				'LSPIdentity.name (client)',
+				'LSPIdentity.version (client)',
+				'LSPIdentity.name (server)',
+				'LSPIdentity.version (server)',
+				'LSPServerCapabilities.positionEncoding',
+				'LSPServerCapabilities.textDocumentSync',
+				'LSPServerCapabilities.diagnosticProvider',
+				'LSPTextDocumentSyncOptions.openClose',
+				'LSPTextDocumentSyncOptions.change',
+				'LSPDiagnosticOptions.identifier',
+				'LSPDiagnosticOptions.interFileDependencies',
+				'LSPDiagnosticOptions.workspaceDiagnostics',
+				'LSP_METHODS.open.params.textDocument',
+				'LSP_METHODS.close.params.textDocument',
+				'LSPDocumentDiagnosticParams.textDocument',
+				'LSPDocumentDiagnosticParams.identifier',
+				'LSPDocumentDiagnosticParams.previousResultId',
+				'LSPDocumentDiagnosticReport.full.kind',
+				'LSPDocumentDiagnosticReport.full.resultId',
+				'LSPDocumentDiagnosticReport.full.items',
+				'LSPDocumentDiagnosticReport.unchanged.kind',
+				'LSPDocumentDiagnosticReport.unchanged.resultId',
+				'LSPPublishDiagnosticsParams.uri',
+				'LSPPublishDiagnosticsParams.version',
+				'LSPPublishDiagnosticsParams.diagnostics',
+				'LSPPosition.line',
+				'LSPPosition.character',
+				'LSPRange.start',
+				'LSPRange.end',
+				'LSPLocation.uri',
+				'LSPLocation.range',
+				'LSPCodeDescription.href',
+				'LSPDiagnosticRelated.location',
+				'LSPDiagnosticRelated.message',
+				'LSPDiagnostic.range',
+				'LSPDiagnostic.severity',
+				'LSPDiagnostic.code',
+				'LSPDiagnostic.codeDescription',
+				'LSPDiagnostic.source',
+				'LSPDiagnostic.message',
+				'LSPDiagnostic.tags',
+				'LSPDiagnostic.relatedInformation',
+				'LSPDiagnostic.data',
+				'LSPTextDocumentIdentifier.uri',
+				'LSPTextDocumentItem.uri',
+				'LSPTextDocumentItem.languageId',
+				'LSPTextDocumentItem.version',
+				'LSPTextDocumentItem.text',
+			]),
+		)
+	})
+
 	it.each(CONFORMANCE_STRUCTURES)('$symbol exists in the named metaModel structure', (row) => {
 		expect(
 			readConformanceDrift(
@@ -103,6 +185,26 @@ describe('LSP structure conformance', () => {
 })
 
 describe('LSP guard conformance', () => {
+	it('covers exactly the exported guards this package publishes', () => {
+		expect(new Set(CONFORMANCE_GUARDS.map((row) => row.symbol))).toStrictEqual(
+			new Set([
+				'isLSPPosition',
+				'isLSPRange',
+				'isLSPLocation',
+				'isLSPCodeDescription',
+				'isLSPDiagnosticRelated',
+				'isLSPDiagnostic',
+				'isLSPPublishDiagnosticsParams',
+				'isLSPDocumentDiagnosticReport',
+				'isLSPIdentity',
+				'isLSPTextDocumentSyncOptions',
+				'isLSPDiagnosticOptions',
+				'isLSPServerCapabilities',
+				'isLSPInitializeResult',
+			]),
+		)
+	})
+
 	it.each(CONFORMANCE_GUARDS)('$symbol accepts an authority-shaped value', (row) => {
 		expect(
 			readConformanceDrift(row.symbol, row.local(row.value), 'metaModel shape', true),

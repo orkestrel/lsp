@@ -2,12 +2,10 @@ import type { JSONRPCMessage, LSPDecodeState } from '@src/core'
 import type { StdioTransportOptions } from '@src/server'
 import { parseLSPMessages } from '@src/core'
 import { isRunning } from '@orkestrel/test/server'
-import { resolveRoot, waitForCondition } from '@orkestrel/test'
+import { waitForCondition } from '@orkestrel/test'
+import { WORKSPACE_ROOT } from './setup.js'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-
-/** The workspace root, resolved from this module's conventional `tests/` location. */
-export const WORKSPACE_ROOT = resolveRoot(import.meta)
 
 /** The protocol-faithful child peer the server suite spawns. */
 export const FIXTURE_PEER = fileURLToPath(
