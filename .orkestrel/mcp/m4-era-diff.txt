@@ -1,0 +1,292 @@
+diff --git a/src/core/MCPClient.ts b/src/core/MCPClient.ts
+index 3e75d72..b1c7d69 100644
+--- a/src/core/MCPClient.ts
++++ b/src/core/MCPClient.ts
+@@ -133,7 +133,7 @@ export class MCPClient implements MCPClientInterface {
+ 	readonly #capabilities: MCPClientCapabilities
+ 	readonly #pin: MCPModernVersion | undefined
+ 	readonly #timeout: number
+-	// The draft Tasks extension's client half, built once and held. It is given this client's
++	// The stable Tasks extension's client half, built once and held. It is given this client's
+ 	// own correlated-request door rather than a second path to the peer, so a task read shares
+ 	// the id space, the pending table, the deadline, and the `disconnect` drain with every other
+ 	// request — and `#request` stays private, because publishing it would be a general
+diff --git a/src/core/MCPServer.ts b/src/core/MCPServer.ts
+index 06731f1..71dc1e9 100644
+--- a/src/core/MCPServer.ts
++++ b/src/core/MCPServer.ts
+@@ -124,7 +124,7 @@ import {
+  * - **One modern seam.** `server/discover`, `tools/list`, `tools/call`, and
+  *   `subscriptions/listen` are always registered; `resources/*`, `prompts/*`, and
+  *   `completion/complete` register independently when their respective host ports are
+- *   configured — plus `tasks/get`, `tasks/update`, and `tasks/cancel` when the draft Tasks
++ *   configured — plus `tasks/get`, `tasks/update`, and `tasks/cancel` when the stable Tasks
+  *   extension is configured — and every method is resolved from the registry on
+  *   every dispatch: the same path a later method or a consumer's own takes, with an
+  *   unregistered method still answering `-32601`.
+@@ -343,7 +343,7 @@ export class MCPServer implements MCPServerInterface {
+ 				this.#suggest(request, completion, options),
+ 			)
+ 		}
+-		// The draft Tasks extension's methods register ONLY when a consumer configured
++		// The stable Tasks extension's methods register ONLY when a consumer configured
+ 		// the extension. An unconfigured server never registers them, so they resolve to nothing
+ 		// and the modern branch answers `-32601` through the same unregistered-method path any
+ 		// other unknown method takes — the honest reply from a server that does not implement an
+@@ -810,7 +810,7 @@ export class MCPServer implements MCPServerInterface {
+ 		return 'jsonrpc' in result ? result : buildJSONRPCResult(id, result)
+ 	}
+ 
+-	// The task decision, and the WHOLE of this server's half of the draft Tasks extension.
++	// The task decision, and the WHOLE of this server's half of the stable Tasks extension.
+ 	//
+ 	// Its position between `#input` and `#progress` is the ordering the extension implies.
+ 	// MRTR runs FIRST because a call still asking its operator a question has not yet been
+@@ -1383,9 +1383,9 @@ export class MCPServer implements MCPServerInterface {
+ 	// refused before its parameters are read at all. The code is the GENERIC
+ 	// missing-required-client-capability code, the same one the elicitation path answers — the
+ 	// tasks and elicitation refusals are told apart by `data.requiredCapabilities` alone, because
+-	// they are instances of the same condition rather than distinct conditions. (The extension's own draft prose still shows
+-	// `-32003` in examples; the dated core schema fixes `-32021`, and a peer implements the
+-	// dated schema.)
++	// they are instances of the same condition rather than distinct conditions. (The extension's
++	// own prose examples show `-32003`; the dated core schema fixes `-32021`, and a peer
++	// implements the dated schema.)
+ 	#named(request: JSONRPCRequest): string | JSONRPCErrorResponse {
+ 		const id = request.id
+ 		const context = parseRequestContext(request, {
+diff --git a/src/core/MCPTaskClient.ts b/src/core/MCPTaskClient.ts
+index d290194..3b5cbad 100644
+--- a/src/core/MCPTaskClient.ts
++++ b/src/core/MCPTaskClient.ts
+@@ -9,7 +9,7 @@ import { MCPError } from './errors.js'
+ import { isMCPTaskDetail } from './validators.js'
+ 
+ /**
+- * The CLIENT half of the draft Tasks extension — the `tasks/*` methods over one
++ * The CLIENT half of the stable Tasks extension — the `tasks/*` methods over one
+  * correlated-request door, exposed as an {@link import('./types.js').MCPClientInterface}'s
+  * `tasks`.
+  *
+diff --git a/src/core/constants.ts b/src/core/constants.ts
+index 0a15ed8..39ed39b 100644
+--- a/src/core/constants.ts
++++ b/src/core/constants.ts
+@@ -60,10 +60,11 @@ export const MCP_META_SERVER = 'io.modelcontextprotocol/serverInfo'
+ export const MCP_META_SUBSCRIPTION = 'io.modelcontextprotocol/subscriptionId'
+ 
+ /**
+- * The reserved extension key identifying the draft Tasks extension.
++ * The reserved extension key identifying the stable Tasks extension.
+  *
+  * @remarks
+- * The ONE spelling of it in this package. A client declares it per REQUEST, under
++ * The ONE spelling of it in this package, and the identity of the immutable snapshot dated
++ * 2026-07-28 this package implements. A client declares it per REQUEST, under
+  * `_meta['io.modelcontextprotocol/clientCapabilities'].extensions`; a server advertises it
+  * under `server/discover`'s `capabilities.extensions`. Both sides carry an empty object —
+  * the extension defines no options, so presence is the entire declaration.
+@@ -83,8 +84,8 @@ export const MCP_HEADER_MISMATCH = -32020
+  * `error.data.requiredCapabilities` alone (`{ elicitation: {} }` against
+  * `{ extensions: { 'io.modelcontextprotocol/tasks': {} } }`). They are instances of the same
+  * condition, so a separate numeral would describe the same fact twice. The Tasks extension's
+- * own draft prose still shows `-32003` in examples; the dated core schema fixes this code,
+- * and the dated schema is what a peer implements against.
++ * own prose examples show `-32003`; the dated core schema fixes this code, and the dated
++ * schema is what a peer implements against.
+  */
+ export const MCP_MISSING_CAPABILITY = -32021
+ 
+diff --git a/src/core/helpers.ts b/src/core/helpers.ts
+index 9882fbf..6c021ee 100644
+--- a/src/core/helpers.ts
++++ b/src/core/helpers.ts
+@@ -93,7 +93,7 @@ export function isFormElicitationSupported(value: unknown): boolean {
+ }
+ 
+ /**
+- * Determines whether a client capability record declares the draft Tasks extension.
++ * Determines whether a client capability record declares the stable Tasks extension.
+  *
+  * @remarks
+  * The declaration lives at `extensions['io.modelcontextprotocol/tasks']` and its value is
+diff --git a/src/core/types.ts b/src/core/types.ts
+index fb2554e..8a6724a 100644
+--- a/src/core/types.ts
++++ b/src/core/types.ts
+@@ -730,8 +730,11 @@ export type MCPExecutionHandler = (
+ // OUTLIVES the request that created it: the server answers `resultType: 'task'`
+ // immediately, and the client comes back for the outcome later.
+ //
+-// The extension is DRAFT (`io.modelcontextprotocol/tasks`, `specification/draft`)
+-// and carries no stability guarantee; every type below can change with it.
++// The extension is the STABLE, immutable snapshot dated 2026-07-28
++// (`io.modelcontextprotocol/tasks`), whose generated schema id is
++// `https://modelcontextprotocol.io/ext-tasks/2026-07-28/schema.json`. That snapshot is
++// fixed, so every type in this family is written against it and a later revision arrives
++// as its own dated snapshot rather than as a change to this one.
+ //
+ // The whole of it is CONSUMER-OWNED. This package decides one thing — whether the
+ // call in hand is deferred — and otherwise carries requests to the manager below
+@@ -982,7 +985,7 @@ export type MCPTaskHandler = (
+ ) => string | undefined | Promise<string | undefined>
+ 
+ /**
+- * Consumer policy for the server's draft Tasks extension.
++ * Consumer policy for the server's stable Tasks extension.
+  *
+  * @remarks
+  * Supplying this is what turns the extension on: an unconfigured server advertises
+@@ -1787,7 +1790,7 @@ export interface MCPJSONLimitOptions {
+  * {@link MCPServerEventMap}, wired at construction. `input` enables modern
+  * `tools/call` multi-round trips: the consumer decides when input is needed and
+  * supplies principal/continuation/TTL policy, while MCP assigns the request key and
+- * owns the protected wire round trip. `task` enables the draft Tasks extension: the
++ * owns the protected wire round trip. `task` enables the stable Tasks extension: the
+  * consumer supplies the durable store and the deferral decision, while MCP owns the
+  * capability gate and the `resultType: 'task'` answer. `limit` configures the server's
+  * hostile-input and live-subscription bounds; every omitted leaf uses
+@@ -1830,12 +1833,12 @@ export interface MCPServerOptions {
+ 	/** Optional event-driven producer for the modern `subscriptions/listen` method. */
+ 	readonly subscription?: MCPSubscriptionOptions
+ 	/**
+-	 * Optional draft Tasks extension; the durable store and the deferral decision are consumer-supplied.
++	 * Optional Tasks extension; the durable store and the deferral decision are consumer-supplied.
+ 	 *
+ 	 * @remarks
+ 	 * Omitting it leaves every existing path untouched — nothing is advertised, no call is
+-	 * deferred, and `tasks/*` stays unregistered. The extension is DRAFT and carries no
+-	 * stability guarantee.
++	 * deferred, and `tasks/*` stays unregistered. The extension is the STABLE, immutable
++	 * snapshot dated 2026-07-28, so the shape this option admits is fixed.
+ 	 */
+ 	readonly task?: MCPTaskOptions
+ 	/** Hostile-input and live-resource bounds; omitted leaves use secure defaults. */
+@@ -2407,7 +2410,7 @@ export interface MCPTaskClientOptions {
+ }
+ 
+ /**
+- * The CLIENT half of the draft Tasks extension — reading, answering, and stopping a durable
++ * The CLIENT half of the stable Tasks extension — reading, answering, and stopping a durable
+  * task the peer created.
+  *
+  * @remarks
+@@ -2426,8 +2429,11 @@ export interface MCPTaskClientOptions {
+  * beside it. It supplies no timer, no scheduler, no terminal-await helper, and no cache,
+  * because it has no durable place to keep a task, no way to know when the application still
+  * cares, and no lifetime to hang a timer on that outlives the request. Schedule the reads
+- * yourself, or wait for the peer to push: an inbound task notification arrives on the client's
+- * existing `notification` event at zero new mechanism.
++ * yourself, or wait for the peer to push. A task notification the server stamped for a
++ * subscription is claimed by the `listen` stream that asked for it and does not re-emit
++ * through the `MCPClientEventMap` `notification` event, so a subscribed consumer reads its
++ * transitions from the stream it opened; an unstamped notification arrives on that event at
++ * no added mechanism.
+  *
+  * Every method authorizes on the peer's side, so a task belonging to another principal is
+  * indistinguishable from one that never existed and one whose TTL purged it — each is
+@@ -2446,7 +2452,7 @@ export interface MCPTaskClientInterface {
+ 	 *
+ 	 * The peer's payload is carried VERBATIM once it proves well-formed. A modern result's own
+ 	 * `resultType: 'complete'` and `_meta` stamps therefore ride along on the snapshot, because
+-	 * rebuilding the object to drop them would also drop the unrecognized draft members this
++	 * rebuilding the object to drop them would also drop the unrecognized members this
+ 	 * package deliberately preserves.
+ 	 *
+ 	 * @param id - The `taskId` to read
+@@ -2567,7 +2573,7 @@ export interface MCPClientInterface {
+ 	/** The injected transport the client drives the remote server over. */
+ 	readonly transport: MCPClientTransportInterface
+ 	/**
+-	 * The draft Tasks extension's client half — reading, answering, and stopping a durable task.
++	 * The stable Tasks extension's client half — reading, answering, and stopping a durable task.
+ 	 *
+ 	 * @remarks
+ 	 * Always present, because the `tasks/*` methods are ordinary requests a client may
+diff --git a/src/core/validators.ts b/src/core/validators.ts
+index d3861ba..4bd3e65 100644
+--- a/src/core/validators.ts
++++ b/src/core/validators.ts
+@@ -1086,9 +1086,9 @@ export function isMCPTaskStatus(value: unknown): value is MCPTaskStatus {
+  * the requests to answer, `completed` owns the deferred call's result, `failed` owns the
+  * JSON-RPC error that ended it, and `working` / `cancelled` own nothing further.
+  *
+- * Unrecognized members stay valid, because the extension is DRAFT and a manager tracking a
+- * later revision must not be refused by this one. What is checked is what this package
+- * publishes as the contract.
++ * Unrecognized members stay valid, because this guard reads a value a consumer's manager
++ * produced, and a guard over a foreign contract enforces the published contract and no more.
++ * What is checked is what this package publishes as the contract.
+  *
+  * @param value - The unknown value to inspect
+  * @returns Whether the value is a well-formed {@link MCPTaskDetail}
+diff --git a/tests/setup.ts b/tests/setup.ts
+index 58a5296..e694b62 100644
+--- a/tests/setup.ts
++++ b/tests/setup.ts
+@@ -1140,7 +1140,7 @@ export function createRecordingTransport(mcp: MCPServerInterface): TestTransport
+ }
+ 
+ /**
+- * Create a real {@link MCPServerInterface} with the draft Tasks extension configured — one
++ * Create a real {@link MCPServerInterface} with the stable Tasks extension configured — one
+  * `render` tool, and a `defer` that turns every call into a durable task.
+  *
+  * @remarks
+@@ -1162,7 +1162,7 @@ export function createTaskServer(tasks: MCPTaskManagerInterface): MCPServerInter
+ 	})
+ }
+ 
+-/** The client capabilities that declare the draft Tasks extension — the whole declaration. */
++/** The client capabilities that declare the stable Tasks extension — the whole declaration. */
+ export const TASK_CAPABILITIES: MCPClientCapabilities = Object.freeze({
+ 	extensions: Object.freeze({ [MCP_EXTENSION_TASKS]: Object.freeze({}) }),
+ })
+diff --git a/tests/src/core/MCPServer.test.ts b/tests/src/core/MCPServer.test.ts
+index 2357232..af4fe0d 100644
+--- a/tests/src/core/MCPServer.test.ts
++++ b/tests/src/core/MCPServer.test.ts
+@@ -4802,7 +4802,7 @@ describe('MCPServer — W02-B: custom carriers and the resolved-option seam', ()
+ 	})
+ })
+ 
+-// ── W03-A: the draft Tasks extension ─────────────────────────────────────────
++// ── W03-A: the stable Tasks extension ────────────────────────────────────────
+ //
+ // The extension puts the whole task lifecycle on the CONSUMER's side of a port, so what
+ // is under test here is a decision and an answer: does this server defer, and does it
+@@ -4873,7 +4873,7 @@ function fixedTaskManager(created: MCPTask): MCPTaskManagerInterface {
+ 	}
+ }
+ 
+-describe('MCPServer — W03-A: the draft Tasks extension', () => {
++describe('MCPServer — W03-A: the stable Tasks extension', () => {
+ 	it('defers a declared call and answers the manager task as a flat modern result', async () => {
+ 		const tasks = new TestTaskManager()
+ 		const mcp = taskServer({ tasks, defer: () => 'operation-1' })
+diff --git a/tests/src/core/MCPTaskClient.test.ts b/tests/src/core/MCPTaskClient.test.ts
+index 05f7003..7de7f9f 100644
+--- a/tests/src/core/MCPTaskClient.test.ts
++++ b/tests/src/core/MCPTaskClient.test.ts
+@@ -17,7 +17,7 @@ import {
+ 	TestTaskManager,
+ } from '../../setup.js'
+ 
+-// The CLIENT half of the draft Tasks extension, over a real MCPServer with the extension
++// The CLIENT half of the stable Tasks extension, over a real MCPServer with the extension
+ // configured, reached through a real in-process transport that records every frame it carries
+ // and when it carried it (no mocks, no fake clock).
+ //
+diff --git a/tests/src/core/validators.test.ts b/tests/src/core/validators.test.ts
+index 36352a1..c11eb6f 100644
+--- a/tests/src/core/validators.test.ts
++++ b/tests/src/core/validators.test.ts
+@@ -1638,7 +1638,7 @@ describe('isModernRequest', () => {
+ 	})
+ })
+ 
+-describe('draft Tasks extension validators', () => {
++describe('stable Tasks extension validators', () => {
+ 	it('reads the extension declaration as presence under the extensions record', () => {
+ 		expect(isTaskSupported({ extensions: { [MCP_EXTENSION_TASKS]: {} } })).toBe(true)
+ 		// Presence only — an extension that later defines options must not retroactively
