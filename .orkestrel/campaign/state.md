@@ -12,16 +12,16 @@ the product-facing overview of the lsp package, the campaign's main subject.
 | Wave | Subject | Standing |
 |---|---|---|
 | W — workflow | Progress adopted in the mcp shape, `unit` removed | Accepted and pushed |
-| M — mcp | Era 2026-07-28 native, repairs, subscriptions | M1-M3.1 landed through `f0ad416`; analyst audit of the M3 round and M3.1 repairs RUNNING; then M4 (tasks proof), M5 (deprecated surface), M6 naming cascade (user blessing pending) |
-| L — lsp | The package: contract, codec, client, transport, conformance | L2-L5 accepted through `c1f5cea`; L6 (the open-bound split) in its design round — planner ruling returned, analyst lane queued on the bench |
+| M — mcp | Era 2026-07-28 native, repairs, subscriptions | M1-M3.1 landed through `f0ad416`; the M3 analyst verdict returned FAIL with the accessor-signal and progress-routing defects, each verified by the Orchestrator's probes (`mcp/m3-analyst-audit-verdict.md`, `mcp/m3-verify.instrument.test.ts`); the M3.2 fix unit is staged (`mcp/m3.2-routing-brief.md`) and launches next on the bench; then M4 (tasks proof), M5 (deprecated surface), M6 naming cascade (user blessing pending) |
+| L — lsp | The package: contract, codec, client, transport, conformance | L2-L5 accepted through `c1f5cea`; L6 (the open-bound split) RULED on 2026-08-26 — the analyst's required-signal contract adopted, reconciliation and amended unit cut in `lsp/l6-design-reconciliation.md`; implementation queues as L6-A/L6-B/L6-D/L6-E |
 | H — html and markdown | Provenance | html accepted through `a533947` (H1, H3 rounds). markdown mid-round: H2-U1 (types), H2-U2 (coordinate engine), H2-U3 (span threading) landed UNCOMMITTED; H2-U4 (rewrite engine), H2-U5 (handle), H2-U6 (guide), H2-U7 (verifier) queued; the round commits as one commit behind one green chain |
 | P — probe | Adopts `@orkestrel/lsp` | P1 landed UNCOMMITTED with a ruled deviation (see following); P2 (`Issue` range) queued behind it; P3 (`@typescript/native-preview`) deferred pending the user's install approval |
 
 ## Held working trees, 2026-08-26
 
 - **mcp** — clean at `f0ad416`. No writer until the analyst verdict returns.
-- **lsp** — clean at `c1f5cea` plus the `ROADMAP.md` addition. The L6 design round
-  rules the next change.
+- **lsp** — clean, on `main`. The L6 reconciliation rules the next source change; the
+  campaign record updates commit as they land.
 - **markdown** — dirty with the uncommitted H2 round (U1+U2+U3). One writer at a time;
   the core check's only diagnostics are the U5 unit's expected three (`span` missing on
   `Markdown.ts:40`, `:94`, `factories.ts:81`); the guides project is red awaiting U6.
@@ -33,24 +33,28 @@ the product-facing overview of the lsp package, the campaign's main subject.
   L6 fork's subject — deliberate, closed by the L6 ruling's consumer rewiring.
 - **scaffold, workflow, process, tool, queue, middleware, html** — clean and pushed.
 
-## The L6 fork, the campaign's open design question
+## The L6 fork, ruled 2026-08-26
 
 The P1 unit proved `LSPClientOptions.timeout` conflates the client's lifecycle bounds
 with the caller-owned inspection budget (`p1-adoption-report.md` § 5, the
-`l6-open-bound-design-brief.md` brief). The planner lane ruled for a per-open options
-bag carrying the caller's `AbortSignal` on both diagnostics paths, the client `timeout`
-keeping lifecycle and settlement, with named tensions for the objective lane
-(`l6-design-planner-ruling.md`). The analyst lane runs on the bench after the M3 audit
-(`l6-design-analyst-cover.md` beside the brief). Reconciliation, the unit cut
-(L6-A through L6-F in the planner's ruling), and the probe rewiring follow both lanes.
+`l6-open-bound-design-brief.md` brief). Both lanes returned and the reconciliation is
+on file (`lsp/l6-design-reconciliation.md`): the analyst's contract is adopted — a
+required per-open options bag with a required `AbortSignal`, the constructor `timeout`
+removed from the push and pull diagnostics waits, the URI kept owned on abort so
+`close` still notifies the server, and `$/cancelRequest` written on an aborted pull.
+The amended unit cut routes L6-A (types) and L6-D (guide) to the native Opus
+`implementer`, L6-B (client plus rows) to the Sol bench, and L6-E (the probe rewire
+with the `StageInterface.inspect` signal seam) to the native Opus `implementer` because
+the probe's proof spawns a language-server grandchild the bench sandbox denies. The
+tarball rebuilds and repacks after L6-B and before L6-E.
 
 ## Bench and lane discipline
 
 One Sol lane at a time through `codex exec` script files under the scratchpad, journals
-under `tmp/codex/`, a Monitor per exec filtered to milestones and exiting on the
-terminal event. The queue at this writing: the M3 analyst audit (running), the L6
-design analyst, then the H2-U4 brief (written from the H2 design record after the U3
-evidence, `h2-design-reconciliation.md`). Native Opus lanes dispatch through the Agent
+under `tmp/codex/` in THIS repository, a Monitor per exec filtered to milestones and
+exiting on the terminal event. The queue at this writing: the M3.2 fix unit (brief in
+`tmp/codex/m3.2-routing-brief.md`), then the H2-U4 rewrite unit
+(`tmp/codex/h2-u4-rewrite-brief.md`). Native Opus lanes dispatch through the Agent
 tool; writers serialize per checkout; parallel writers run only across disjoint
 checkouts.
 
@@ -82,7 +86,9 @@ design round, the fleet sweeps, the shared research, and the H-wave terrain) und
 `.orkestrel/campaign/`. Each package folder holds its units' briefs, reports, audit
 verdicts, settling receipts, instruments, and acceptance records, one file set per
 unit, named `<unit>-<noun>.md`. Retention lands new artifacts here directly. Live
-bench journals: `tmp/codex/` in the scaffold repository, swept at each round's
-acceptance. Launch and gate scripts: the session scratchpad, with the executed copies
-retained beside their units at acceptance. Every repository works on the
-`claude/lsp-spec-audit-est33d` branch.
+bench journals and launch briefs: `tmp/codex/` in THIS repository, swept at each
+round's acceptance; journals from lanes launched before 2026-08-26 sit in the scaffold
+repository's `tmp/codex/` until their rounds accept. Launch and gate scripts: the
+session scratchpad, with the executed copies retained beside their units at
+acceptance. This repository works on `main`; every other campaign repository works on
+the `claude/lsp-spec-audit-est33d` branch.
