@@ -1,5 +1,0 @@
-{
-  "file": "src/core/helpers.ts",
-  "from": "\t\t\telse if (source !== current) derivations.set(rewritten, undefined)\n",
-  "to": ""
-}

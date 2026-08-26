@@ -1,5 +1,0 @@
-{
-  "file": "src/core/helpers.ts",
-  "from": "\t\t\t\t\tif (!derivations.has(replacement)) derivations.set(replacement, current)\n",
-  "to": "\t\t\t\t\tif (!derivations.has(replacement)) derivations.delete(replacement)\n"
-}

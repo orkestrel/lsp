@@ -1,5 +1,0 @@
-{
-  "file": "src/core/HTML.ts",
-  "from": "\t\t\t\tconst span = this.#spans.get(source)\n",
-  "to": "\t\t\t\tconst span = derivations.has(source) ? undefined : this.#spans.get(source)\n"
-}

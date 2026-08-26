@@ -1,5 +1,0 @@
-{
-  "file": "src/core/helpers.ts",
-  "from": "\t\t\t\t\tif (!derivations.has(candidate)) derivations.set(candidate, current)\n\t\t\t\t\telse if (derivations.get(candidate) !== current) derivations.set(candidate, undefined)\n\t\t\t\t}\n\t\t\t}\n\t\t\tconst replacements = prune(candidate)\n",
-  "to": "\t\t\t\t}\n\t\t\t}\n\t\t\tconst replacements = prune(candidate)\n"
-}

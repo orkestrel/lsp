@@ -1,8 +1,0 @@
- M guides/lsp.md
- M src/core/LSPClient.ts
- M src/core/factories.ts
- M src/core/types.ts
- M tests/src/core/LSPClient.test.ts
- M tests/src/server/integration.test.ts
-?? .orkestrel/lsp/l6-round-diff.txt
-?? .orkestrel/lsp/l6-round-status.txt
