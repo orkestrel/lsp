@@ -65,3 +65,17 @@ The h2.1 audit evidence is Orchestrator-produced because the reviewer lane canno
 isolated h2.1 diff (reconstructed from the committed checkpoint against the retained round diff),
 the green runs of the two red-first rows, and revert-proof controls that redden exactly those rows
 under the pre-fix sources, with the exact restore proven by an empty `git status --porcelain`.
+
+## Routing rows added at the m4-mirror.1 and h2.2-prose boundary
+
+| Unit | Role | Engine | Route and record |
+|---|---|---|---|
+| `m4-mirror.1` acceptance | Orchestrator | — | Host gates after the bench denied the conformance listener: `format:check` 0, digest pinned, conformance `42 passed (42)`. mcp checkpoint `bc54b38`. |
+| `h2.2-prose` integration | Orchestrator | — | The unit's exact `Markdown.ts` `@returns` patch applied serially; scoped `oxfmt --check` exit 0. |
+| `h2.2-audit` | `analyst` | GPT-5.6 Sol (bench, read-only) | Audits the Opus-written `h2.2-prose` against the held markdown tree. Queued first on the Sol bench; `m4-stream` follows it, one lane at a time. |
+| `m4-stream` | `sol` | GPT-5.6 Sol (bench, workspace-write) | Launches after `h2.2-audit` terminates, from the clean `bc54b38` baseline. |
+| `g1-queue`, `g1-process`, `g1-tool`, `g1-middleware` | `builder` | Sonnet (native) | Parallel across the four disjoint checkouts; each owns its own guide plus its `tests/guides.test.ts` run. Briefs from `g1-terrain-distillate.md`. |
+| `p2-range` | `implementer` | Opus 5 (native) | Still in flight in probe; Sol `analyst` audit on return. |
+
+Carried finding: the `Markdown.ts:27-28` class TSDoc over-claim from the `h2.2-prose` report is
+carried by the `h2.3-fences` brief, recorded in `state.md`'s H2 table.
