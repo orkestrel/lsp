@@ -105,6 +105,17 @@ export const policy = (): UserConfig => ({
 	},
 })
 
+export const setup = (): UserConfig => ({
+	resolve,
+	test: {
+		name: { label: 'setup', color: 'green' },
+		include: ['tests/setup*.test.ts'],
+		setupFiles: ['./tests/setup.ts'],
+		environment: 'node',
+		browser: { enabled: false },
+	},
+})
+
 export const config = (): UserConfig => ({
 	resolve,
 	test: {
@@ -154,6 +165,6 @@ export const probe = (): UserConfig => ({
 export default defineConfig({
 	resolve,
 	test: {
-		projects: [srcCore, srcServer, policy, config, distribution, probe],
+		projects: [srcCore, srcServer, policy, setup, config, distribution, probe],
 	},
 })

@@ -1,10 +1,10 @@
 import type { EmitterInterface } from '@orkestrel/emitter'
-import type { LSPTransportEventMap, LSPTransportInterface } from '@src/core'
+import type { LSPExit, LSPTransportEventMap, LSPTransportInterface } from '@src/core'
 import type { ChildProcess } from 'node:child_process'
 import type { StdioTransportOptions } from '../types.js'
 import { Emitter } from '@orkestrel/emitter'
 import { LSPError } from '@src/core'
-import { resolveExecutable, stopChild, waitForExit } from '@orkestrel/process/server'
+import { buildSpawn, stopChild, waitForClose, waitForExit } from '@orkestrel/process/server'
 import { spawn } from 'node:child_process'
 
 /**
@@ -16,13 +16,20 @@ import { spawn } from 'node:child_process'
  * into one read both arrive unaltered and the client's parser owns the framing. Standard error is
  * drained so a chatty server cannot fill its pipe and stall.
  *
+ * Each `start` opens a generation that owns its child until termination settles. Only the current
+ * generation reaches the emitter, so a child whose standard output a grandchild holds open past its
+ * own exit delivers neither a stale `exit` nor a stale chunk into the generation that replaced it.
+ * The retired generation's streams keep draining, so a pipe-holding grandchild never blocks on a
+ * full pipe.
+ *
  * The child stays in this process's group rather than leading its own, so `stopChild` reaches it
  * through a direct signal after the host reports that no group owns its identifier.
  *
  * `start` rejects with an `LSPError` coded `spawn` when the command is empty, when the host refuses
  * the spawn, and when the child reports a spawn fault; it rejects with one coded `duplicate` while a
- * child is still live. `send` and `close` reject rather than throw. `send` resolves `false` before
- * the first `start`, after `close` resolves, and after the child exits.
+ * child is still live and while a `close` is still in flight. `send` and `close` reject rather than
+ * throw. `send` resolves `false` before the first `start`, after `close` resolves, and after the
+ * child exits.
  *
  * @example
  * ```ts
@@ -38,6 +45,9 @@ export class StdioTransport implements LSPTransportInterface {
 	readonly #environment: Readonly<Record<string, string | undefined>> | undefined
 	readonly #grace: number
 	#child: ChildProcess | undefined = undefined
+	#generation = 0
+	#owner: number | undefined = undefined
+	#closing: Promise<void> | undefined = undefined
 
 	/**
 	 * Creates a stdio transport over the configured child process.
@@ -62,19 +72,21 @@ export class StdioTransport implements LSPTransportInterface {
 	 * Spawns the configured child process and observes its streams.
 	 *
 	 * @returns A promise that resolves after the host reports the child spawned.
-	 * @throws An `LSPError` coded `duplicate` while a child is live, and one coded `spawn` when the
-	 * command is empty or the host refuses the spawn.
+	 * @throws An `LSPError` coded `duplicate` while a child is live or a `close` is still in flight,
+	 * and one coded `spawn` when the command is empty or the host refuses the spawn.
 	 */
 	async start(): Promise<void> {
-		if (this.#live())
+		if (this.#live() || this.#closing !== undefined)
 			throw new LSPError('The stdio transport already owns a live child process', {
 				code: 'duplicate',
 			})
 		const [file, ...parameters] = this.#command
 		if (file === undefined || file.length === 0)
 			throw new LSPError('The stdio transport requires a command executable', { code: 'spawn' })
+		const generation = this.#generation
 		const child = this.#launch(file, parameters)
 		this.#child = child
+		this.#owner = generation
 		try {
 			await new Promise<void>((resolve, reject) => {
 				child.once('spawn', () => resolve())
@@ -89,9 +101,10 @@ export class StdioTransport implements LSPTransportInterface {
 			})
 		} catch (error) {
 			this.#child = undefined
+			this.#owner = undefined
 			throw error
 		}
-		this.#observe(child)
+		this.#observe(child, generation)
 	}
 
 	/**
@@ -115,20 +128,28 @@ export class StdioTransport implements LSPTransportInterface {
 	/**
 	 * Ends the child process within the configured grace window.
 	 *
-	 * @returns A promise that resolves after the child has exited or been killed.
+	 * @returns A promise that resolves after the child has exited and its generation has retired.
+	 * @throws An `LSPError` coded `timeout` when the process package cannot confirm the child
+	 * stopped; the transport keeps the still-live child, so a later `start` is still refused.
 	 * @remarks Ending the child's input stream is the cooperative signal a conformant language server
 	 * answers by exiting. A child still live after `grace` is handed to the process package's
 	 * `stopChild` helper, which signals it, waits `grace`, and escalates to an unconditional kill.
+	 * A second `close` called while the first is in flight settles on that same termination rather
+	 * than resolving early. The wait for the child's stdio to close is bounded by `grace` too, so a
+	 * grandchild holding the child's standard output delays neither this call nor the `exit` event.
 	 */
 	async close(): Promise<void> {
+		const closing = this.#closing
+		if (closing !== undefined) return await closing
 		const child = this.#child
-		this.#child = undefined
-		if (child === undefined || child.exitCode !== null || child.signalCode !== null) return
-		const stdin = child.stdin
-		if (stdin !== null && !stdin.writableEnded && !stdin.destroyed) stdin.end()
-		await waitForExit(child, this.#grace)
-		if (child.exitCode === null && child.signalCode === null)
-			await stopChild(child, this.#grace, this.#grace)
+		if (child === undefined || this.#owner !== this.#generation) return
+		const settling = this.#settle(child, this.#generation)
+		this.#closing = settling
+		try {
+			await settling
+		} finally {
+			this.#closing = undefined
+		}
 	}
 
 	#live(): boolean {
@@ -136,34 +157,76 @@ export class StdioTransport implements LSPTransportInterface {
 		return child !== undefined && child.exitCode === null && child.signalCode === null
 	}
 
+	async #settle(child: ChildProcess, generation: number): Promise<void> {
+		const stdin = child.stdin
+		if (stdin !== null && !stdin.writableEnded && !stdin.destroyed) stdin.end()
+		await waitForExit(child, this.#grace)
+		if (child.exitCode === null && child.signalCode === null) {
+			// The rejection below is unproven. A POSIX host cannot refuse SIGKILL, so no real child
+			// drives a false return here: a fixture that ignores SIGTERM reports a confirmed stop at
+			// a zero window and at a graced one alike, and simulating the helper would prove nothing
+			// about it. A host that can hold a process past SIGKILL closes the gap — a Windows tree
+			// whose kill utility fails, or a process blocked in the kernel — so the branch waits on
+			// that host joining the suite's matrix.
+			const stopped = await stopChild(child, this.#grace, this.#grace)
+			if (!stopped)
+				throw new LSPError('The stdio transport could not confirm its child process stopped', {
+					code: 'timeout',
+					context: { value: child.pid },
+				})
+		}
+		if (generation === this.#generation) await waitForClose(child, this.#grace)
+		this.#retire(generation, { code: child.exitCode, signal: child.signalCode })
+	}
+
 	#launch(file: string, parameters: readonly string[]): ChildProcess {
 		const directory = this.#directory
 		const environment = this.#environment
 		try {
-			return spawn(
-				resolveExecutable(file, {
+			const input = buildSpawn(
+				{ file, arguments: parameters },
+				{
 					...(directory === undefined ? {} : { workspace: directory }),
 					...(environment === undefined ? {} : { environment }),
-				}) ?? file,
-				[...parameters],
-				{
-					stdio: ['pipe', 'pipe', 'pipe'],
-					...(directory === undefined ? {} : { cwd: directory }),
-					...(environment === undefined ? {} : { env: { ...environment } }),
 				},
 			)
+			return spawn(input.file, [...input.arguments], {
+				stdio: ['pipe', 'pipe', 'pipe'],
+				windowsVerbatimArguments: input.verbatim,
+				...(directory === undefined ? {} : { cwd: directory }),
+				...(environment === undefined ? {} : { env: { ...environment } }),
+			})
 		} catch (cause) {
 			throw new LSPError('The stdio transport could not spawn its server', { code: 'spawn', cause })
 		}
 	}
 
-	#observe(child: ChildProcess): void {
-		child.stdout?.on('data', (chunk: Buffer) => this.#emitter.emit('chunk', chunk))
+	#observe(child: ChildProcess, generation: number): void {
+		child.stdout?.on('data', (chunk: Buffer) => this.#deliver(generation, chunk))
 		child.stderr?.resume()
-		child.stdin?.on('error', (fault: unknown) => this.#emitter.emit('error', fault))
-		child.on('error', (fault: unknown) => this.#emitter.emit('error', fault))
+		child.stdin?.on('error', (fault: unknown) => this.#report(generation, fault))
+		child.on('error', (fault: unknown) => this.#report(generation, fault))
 		child.on('close', (code: number | null, signal: NodeJS.Signals | null) =>
-			this.#emitter.emit('exit', { code, signal }),
+			this.#retire(generation, { code, signal }),
 		)
+	}
+
+	#deliver(generation: number, chunk: Uint8Array): void {
+		if (generation !== this.#generation) return
+		this.#emitter.emit('chunk', chunk)
+	}
+
+	#report(generation: number, fault: unknown): void {
+		if (generation !== this.#generation) return
+		this.#emitter.emit('error', fault)
+	}
+
+	// Retiring a generation is what makes its `exit` fire exactly once: the first settlement to
+	// arrive — the host's own `close` event or the bounded wait inside `#settle` — advances the
+	// counter, and every later listener carrying the retired number returns before it emits.
+	#retire(generation: number, exit: LSPExit): void {
+		if (generation !== this.#generation) return
+		this.#generation += 1
+		this.#emitter.emit('exit', exit)
 	}
 }

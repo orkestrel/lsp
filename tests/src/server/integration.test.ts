@@ -26,11 +26,11 @@ describe('src server oxlint receipt', () => {
 			timeout: 10_000,
 		})
 		const baseline = new Set(readChildProcesses(process.pid))
+		const spawned: number[] = []
 		try {
 			await client.start()
-			const spawned = readChildProcesses(process.pid).filter((pid) => !baseline.has(pid))
+			spawned.push(...readChildProcesses(process.pid).filter((pid) => !baseline.has(pid)))
 			expect(spawned).toHaveLength(1)
-			const [pid] = spawned
 			expect(client.capabilities?.textDocumentSync).toStrictEqual({
 				openClose: true,
 				change: 1,
@@ -50,11 +50,13 @@ describe('src server oxlint receipt', () => {
 				start: { line: 0, character: 0 },
 				end: { line: 0, character: 8 },
 			})
-			await client.destroy()
-			await waitForReaped(pid === undefined ? 0 : pid)
-			expect(pid === undefined ? true : isRunning(pid)).toBe(false)
 		} finally {
+			// Teardown and reaping run whatever the assertions did, so a failed expectation reports
+			// itself instead of leaving a language server behind for the next proof to meet.
+			await client.destroy()
+			for (const pid of spawned) await waitForReaped(pid)
 			await destroyScratch(scratch)
 		}
+		for (const pid of spawned) expect(isRunning(pid)).toBe(false)
 	}, 30_000)
 })

@@ -14,6 +14,11 @@ export const FIXTURE_PEER = fileURLToPath(
 	new URL('tests/src/server/fixtures/peer.mjs', WORKSPACE_ROOT),
 )
 
+/** The child peer that hands its standard output to a pipe-holding grandchild. */
+export const FIXTURE_HOLDER = fileURLToPath(
+	new URL('tests/src/server/fixtures/holder.mjs', WORKSPACE_ROOT),
+)
+
 /** The Oxlint entry the live receipt drives in its language-server mode. */
 export const OXLINT_ENTRY = fileURLToPath(new URL('node_modules/oxlint/bin/oxlint', WORKSPACE_ROOT))
 
@@ -53,6 +58,19 @@ export function createPeerOptions(options?: {
 		},
 		...(options?.grace === undefined ? {} : { grace: options.grace }),
 	}
+}
+
+/**
+ * Builds transport options that spawn the holder peer through the current Node executable.
+ *
+ * @param release - The path whose appearance releases the grandchild holding the child's output.
+ * @param grace - The cooperative termination window in milliseconds.
+ * @returns Stdio transport options naming the holder peer as the child command.
+ * @remarks The grace window also bounds the wait for the child's stdio close, and the holder's
+ * grandchild outlives that wait, so keep it short enough that a close stays quick.
+ */
+export function createHolderOptions(release: string, grace: number): StdioTransportOptions {
+	return { server: { command: [process.execPath, FIXTURE_HOLDER, release] }, grace }
 }
 
 /**
@@ -150,14 +168,16 @@ export function readProcessTable(parent: number): readonly number[] {
 }
 
 /**
- * Reads the identifiers of the live child processes one parent owns.
+ * Reads the identifiers of the child processes the host still reports for one parent.
  *
  * @param parent - The parent process identifier.
  * @returns Every child identifier both snapshots reported, in table order.
  * @remarks A child a language server spawns for itself is invisible to a caller holding only the
  * transport, so the host process table is where its identifier comes from. Reading that table costs
  * a child of its own, and that child appears in its own output, so two snapshots are intersected and
- * only a child that outlived both survives.
+ * only a child that outlived both survives. A terminated child holds its row until the host reaps
+ * it, so read the table while the child is expected live and wait on `waitForReaped` for the other
+ * direction.
  */
 export function readChildProcesses(parent: number): readonly number[] {
 	const earlier = new Set(readProcessTable(parent))

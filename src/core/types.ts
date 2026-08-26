@@ -204,6 +204,15 @@ export interface LSPExit {
 /** Maps transport event names to their listener arguments. */
 export type LSPTransportEventMap = {
 	readonly chunk: readonly [chunk: Uint8Array]
+	/**
+	 * Reports how the peer of the current generation ended.
+	 *
+	 * @remarks
+	 * An implementation emits this event only for the transport's current generation, and at most
+	 * once for it. A generation retired by `close` or by its own exit reaches no listener again, so a
+	 * peer whose descriptors outlive it cannot deliver a late `exit` into the generation that
+	 * replaced it.
+	 */
 	readonly exit: readonly [exit: LSPExit]
 	readonly error: readonly [error: unknown]
 }
@@ -215,6 +224,12 @@ export type LSPTransportEventMap = {
  * The `send` and `close` methods must reject rather than throw. After `close` resolves, `send`
  * must resolve `false`. The client may call `start` again only after `close` resolves or the
  * transport emits `exit`; an implementation that cannot reconnect must reject that call.
+ *
+ * Each `start` opens a generation. An implementation must emit `chunk`, `exit`, and `error` only
+ * for the current generation, and must emit `exit` at most once for it, so the client never reads a
+ * retired peer's bytes or exit as the live one's. An implementation whose peer can outlive its own
+ * `close` — a child process whose descriptors a grandchild holds open — carries that obligation
+ * itself; the client trusts every `exit` it receives.
  */
 export interface LSPTransportInterface {
 	readonly emitter: EmitterInterface<LSPTransportEventMap>

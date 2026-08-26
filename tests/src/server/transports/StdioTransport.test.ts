@@ -2,9 +2,10 @@ import type { LSPExit } from '@src/core'
 import { encodeLSPMessage, isLSPError } from '@src/core'
 import { StdioTransport } from '@src/server'
 import { createRecorder, waitForCondition } from '@orkestrel/test'
-import { createScratch, destroyScratch } from '@orkestrel/test/server'
+import { createScratch, destroyScratch, isRunning } from '@orkestrel/test/server'
 import {
 	collectPeerMessages,
+	createHolderOptions,
 	createPeerOptions,
 	readPeerPid,
 	readPeerResult,
@@ -12,6 +13,7 @@ import {
 	waitForReaped,
 } from '../../../setupServer.js'
 import { realpathSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // A spawned interpreter, a round trip through its pipes, and a kill escalation all cost more than
@@ -20,6 +22,7 @@ const PEER = { budget: 5_000 }
 
 const PING = encodeLSPMessage({ jsonrpc: '2.0', method: 'probe/ping' })
 const ECHO = encodeLSPMessage({ jsonrpc: '2.0', id: 1, method: 'probe/echo', params: {} })
+const HOLD = encodeLSPMessage({ jsonrpc: '2.0', id: 2, method: 'probe/hold', params: {} })
 
 describe('StdioTransport', () => {
 	it('rejects an empty command as a spawn failure', async () => {
@@ -59,6 +62,46 @@ describe('StdioTransport', () => {
 			await transport.close()
 		}
 	})
+
+	it('refuses a start issued while a close is still in flight', async () => {
+		const transport = new StdioTransport(createPeerOptions({ grace: 2_000 }))
+		await transport.start()
+		const closing = transport.close()
+		const fault = await transport.start().then(
+			() => undefined,
+			(error: unknown) => error,
+		)
+		try {
+			await closing
+			expect(isLSPError(fault)).toBe(true)
+			expect(isLSPError(fault) ? fault.code : undefined).toBe('duplicate')
+		} finally {
+			await transport.close()
+		}
+	})
+
+	it('settles a concurrent close on the same termination the first close awaits', async () => {
+		const chunks = createRecorder<[Uint8Array]>()
+		const transport = new StdioTransport(createPeerOptions({ stubborn: true, grace: 200 }))
+		transport.emitter.on('chunk', chunks.handler)
+		await transport.start()
+		await transport.send(ECHO)
+		await waitForCondition(
+			'the echo response',
+			() => collectPeerMessages(chunks.calls.flat()).length >= 2,
+			PEER,
+		)
+		const pid = readPeerPid(collectPeerMessages(chunks.calls.flat()))
+		const first = transport.close()
+		const second = transport.close()
+		try {
+			await second
+			expect(isRunning(pid)).toBe(false)
+		} finally {
+			await first
+			await waitForReaped(pid)
+		}
+	}, 15_000)
 
 	it('delivers a frame split across host reads without joining the chunks', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
@@ -245,4 +288,43 @@ describe('StdioTransport', () => {
 		expect(second).not.toBe(first)
 		for (const pid of generations) await waitForReaped(pid)
 	}, 15_000)
+
+	it('keeps a retired generation off the emitter while a grandchild holds its output', async () => {
+		const scratch = createScratch({ prefix: 'lsp-holder-' })
+		const release = join(scratch.path, 'release')
+		const chunks = createRecorder<[Uint8Array]>()
+		const exits = createRecorder<[LSPExit]>()
+		const transport = new StdioTransport(createHolderOptions(release, 200))
+		transport.emitter.on('chunk', chunks.handler)
+		transport.emitter.on('exit', exits.handler)
+		await transport.start()
+		try {
+			await waitForCondition('the holder ready frame', () => chunks.count >= 1, PEER)
+			await transport.send(HOLD)
+			await waitForCondition(
+				'the grandchild report',
+				() => readPeerResult(collectPeerMessages(chunks.calls.flat()), 'grandchild') !== undefined,
+				PEER,
+			)
+			const held = readPeerResult(collectPeerMessages(chunks.calls.flat()), 'grandchild')
+			await transport.close()
+			expect(exits.count).toBe(1)
+			chunks.clear()
+			await transport.start()
+			await waitForCondition('the replacement ready frame', () => chunks.count >= 1, PEER)
+			scratch.write('release', '')
+			await waitForReaped(typeof held === 'number' ? held : 0)
+			await transport.send(ECHO)
+			await waitForCondition(
+				'the replacement echo response',
+				() => readPeerResult(collectPeerMessages(chunks.calls.flat()), 'pid') !== undefined,
+				PEER,
+			)
+			expect(readPeerShapes(collectPeerMessages(chunks.calls.flat()))).not.toContain('grandchild')
+			expect(exits.count).toBe(1)
+		} finally {
+			await transport.close()
+			await destroyScratch(scratch)
+		}
+	}, 30_000)
 })

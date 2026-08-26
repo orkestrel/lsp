@@ -40,6 +40,10 @@ its emitter. The `send()` and `close()` methods reject instead of throwing. Afte
 `send()` resolves `false`. The client can call `start()` again only after `close()` resolves or the
 transport emits `exit`. A transport that cannot reconnect rejects that later `start()` call.
 
+Each `start()` call opens a generation, and an implementation emits `chunk`, `exit`, and `error`
+only for the current one, emitting `exit` at most once for it. The client trusts every `exit` it
+receives, so an implementation whose peer can outlive its own `close()` owns that obligation.
+
 The client also defends against a foreign transport that throws synchronously. It converts a send
 fault into a coded `LSPError`, bounds exit and close settlement, and removes transport listeners
 during teardown. A close failure that settles before the deadline is emitted before the client
@@ -73,17 +77,26 @@ await client.destroy()
 ```
 
 `grace` bounds the cooperative termination window in milliseconds, and `5000` applies when it is
-absent. Closing ends the child's input stream, waits `grace` for the child's own exit, and hands a
+absent. `close()` ends the child's input stream, waits `grace` for the child's own exit, and hands a
 child that outlives that window to the process package's `stopChild` helper, which signals it, waits
 `grace` again, and escalates to an unconditional kill. The child stays in the parent's process group
 rather than leading its own, so that helper reaches it through a direct signal after the host reports
-that no group owns its identifier. The `exit` event carries the code and signal the host reported.
+that no group owns its identifier. `close()` then waits up to `grace` more for the child's streams to
+close, and emits `exit` carrying the code and signal the host reported, so a grandchild holding the
+child's standard output open past its exit delays neither the call nor the event. A second `close()`
+called while the first is in flight settles on that same termination rather than resolving early.
+When the helper cannot confirm the child stopped, `close()` rejects with an `LSPError` whose `code`
+property is `timeout`, and the transport keeps the still-live child.
 
-The transport reconnects. After `close()` resolves, or after the child exits on its own and the
-transport emits `exit`, a further `start()` call spawns a fresh child. A `start()` call made while a
-child is still live is refused with an `LSPError` whose `code` property is `duplicate`. An empty
-command, a host that refuses the spawn, and a child that reports a spawn fault each reject `start()`
-with one coded `spawn`. `send()` resolves `false` before the first `start()`, after `close()`
+Each `start()` call opens a generation that owns its child, and only the current generation reaches
+the emitter. `start()` spawns the configured child and resolves after the host reports it spawned.
+The transport reconnects: after `close()` resolves, or after the child exits on its own and the
+transport emits `exit`, a further `start()` call spawns a fresh child, and the retired generation
+delivers neither a later `exit` nor a later chunk. A `start()` call made while a child is still live,
+or while a `close()` is still in flight, is refused with an `LSPError` whose `code` property is
+`duplicate`. An empty command, a host that refuses the spawn, and a child that reports a spawn fault
+each reject `start()` with one coded `spawn`. `send()` writes bytes to the child's standard input and
+reports whether it accepted them, resolving `false` before the first `start()`, after `close()`
 resolves, and after the child exits.
 
 ## Framing state
@@ -115,16 +128,6 @@ The transport interface exposes these behavioral methods:
 | `start` | `start(): Promise<void>`                    | Starts or restarts the byte transport.                       |
 | `send`  | `send(bytes: Uint8Array): Promise<boolean>` | Sends bytes and reports whether the transport accepted them. |
 | `close` | `close(): Promise<void>`                    | Closes the active transport generation.                      |
-
-### `StdioTransport`
-
-The stdio transport exposes exactly the `LSPTransportInterface` methods, with these behaviors:
-
-| Method  | Signature                                   | Behavior                                                                     |
-| ------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
-| `start` | `start(): Promise<void>`                    | Spawns the configured child and resolves after the host reports it spawned.  |
-| `send`  | `send(bytes: Uint8Array): Promise<boolean>` | Writes bytes to the child's standard input and reports whether it took them. |
-| `close` | `close(): Promise<void>`                    | Ends the child cooperatively, then kills it after the grace window.          |
 
 ## Surface
 
