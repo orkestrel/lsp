@@ -121,6 +121,23 @@ export function readPeerResult(messages: readonly JSONRPCMessage[], key: string)
 }
 
 /**
+ * Reads one numeric member of the first result payload the fixture peer returned.
+ *
+ * @param messages - The decoded peer messages, in arrival order.
+ * @param key - The result member to read.
+ * @returns The member's value.
+ * @throws An `Error` naming the member when no result carried it as a number.
+ * @remarks A caller that needs the value cannot proceed without it, so an absent or off-shape member
+ * fails here rather than reaching an assertion as a stand-in number.
+ */
+export function readPeerNumber(messages: readonly JSONRPCMessage[], key: string): number {
+	const value = readPeerResult(messages, key)
+	if (typeof value !== 'number')
+		throw new Error(`the fixture peer reported no numeric ${key} member`)
+	return value
+}
+
+/**
  * Reads the process identifier the fixture peer reported for itself.
  *
  * @param messages - The decoded peer messages, in arrival order.
@@ -128,9 +145,7 @@ export function readPeerResult(messages: readonly JSONRPCMessage[], key: string)
  * @throws An `Error` when no echo result carried an identifier.
  */
 export function readPeerPid(messages: readonly JSONRPCMessage[]): number {
-	const pid = readPeerResult(messages, 'pid')
-	if (typeof pid !== 'number') throw new Error('the fixture peer reported no process identifier')
-	return pid
+	return readPeerNumber(messages, 'pid')
 }
 
 /**

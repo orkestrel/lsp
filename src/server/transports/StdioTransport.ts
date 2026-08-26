@@ -16,20 +16,21 @@ import { spawn } from 'node:child_process'
  * into one read both arrive unaltered and the client's parser owns the framing. Standard error is
  * drained so a chatty server cannot fill its pipe and stall.
  *
- * Each `start` opens a generation that owns its child until termination settles. Only the current
- * generation reaches the emitter, so a child whose standard output a grandchild holds open past its
- * own exit delivers neither a stale `exit` nor a stale chunk into the generation that replaced it.
- * The retired generation's streams keep draining, so a pipe-holding grandchild never blocks on a
- * full pipe.
+ * Each accepted `start` opens a generation that owns its child until termination settles. Only the
+ * current generation reaches the emitter, so a child whose standard output a grandchild holds open
+ * past its own exit delivers neither a stale `exit` nor a stale chunk into the generation that
+ * replaced it. The retired generation's streams keep draining, so a pipe-holding grandchild never
+ * blocks on a full pipe.
  *
  * The child stays in this process's group rather than leading its own, so `stopChild` reaches it
  * through a direct signal after the host reports that no group owns its identifier.
  *
  * `start` rejects with an `LSPError` coded `spawn` when the command is empty, when the host refuses
- * the spawn, and when the child reports a spawn fault; it rejects with one coded `duplicate` while a
- * child is still live and while a `close` is still in flight. `send` and `close` reject rather than
- * throw. `send` resolves `false` before the first `start`, after `close` resolves, and after the
- * child exits.
+ * the spawn, and when the child reports a spawn fault; it rejects with one coded `duplicate` while
+ * the previous generation is unsettled, which covers a live child, a child that has exited natively
+ * while a grandchild still holds its standard output, and a `close` still in flight. `send` and
+ * `close` reject rather than throw. `send` resolves `false` before the first `start`, after `close`
+ * resolves, and after the child exits.
  *
  * @example
  * ```ts
@@ -72,12 +73,18 @@ export class StdioTransport implements LSPTransportInterface {
 	 * Spawns the configured child process and observes its streams.
 	 *
 	 * @returns A promise that resolves after the host reports the child spawned.
-	 * @throws An `LSPError` coded `duplicate` while a child is live or a `close` is still in flight,
-	 * and one coded `spawn` when the command is empty or the host refuses the spawn.
+	 * @throws An `LSPError` coded `duplicate` while the previous child still owns the current
+	 * generation or a `close` is still in flight, and one coded `spawn` when the command is empty or
+	 * the host refuses the spawn. Leave that window through `close`, whose wait for the child's stdio
+	 * is bounded by `grace`, or by waiting for the transport's `exit` event.
 	 */
 	async start(): Promise<void> {
-		if (this.#live() || this.#closing !== undefined)
-			throw new LSPError('The stdio transport already owns a live child process', {
+		// A natively exited child keeps owning its generation until a settlement retires it, and its
+		// standard output can still deliver bytes through a grandchild holding the pipe. Comparing the
+		// owner against the current generation is what refuses a replacement inside that window; a
+		// liveness reading reports the child dead there and would hand the successor a shared owner.
+		if (this.#owner === this.#generation || this.#closing !== undefined)
+			throw new LSPError('The stdio transport has not retired its previous child generation', {
 				code: 'duplicate',
 			})
 		const [file, ...parameters] = this.#command
@@ -150,11 +157,6 @@ export class StdioTransport implements LSPTransportInterface {
 		} finally {
 			this.#closing = undefined
 		}
-	}
-
-	#live(): boolean {
-		const child = this.#child
-		return child !== undefined && child.exitCode === null && child.signalCode === null
 	}
 
 	async #settle(child: ChildProcess, generation: number): Promise<void> {

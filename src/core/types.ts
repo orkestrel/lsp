@@ -225,11 +225,11 @@ export type LSPTransportEventMap = {
  * must resolve `false`. The client may call `start` again only after `close` resolves or the
  * transport emits `exit`; an implementation that cannot reconnect must reject that call.
  *
- * Each `start` opens a generation. An implementation must emit `chunk`, `exit`, and `error` only
- * for the current generation, and must emit `exit` at most once for it, so the client never reads a
- * retired peer's bytes or exit as the live one's. An implementation whose peer can outlive its own
- * `close` — a child process whose descriptors a grandchild holds open — carries that obligation
- * itself; the client trusts every `exit` it receives.
+ * Each accepted `start` opens a generation. An implementation must emit `chunk`, `exit`, and
+ * `error` only for the current generation, and must emit `exit` at most once for it, so the client
+ * never reads a retired peer's bytes or exit as the live one's. An implementation whose peer can
+ * outlive its own `close` — a child process whose descriptors a grandchild holds open — carries
+ * that obligation itself; the client trusts every `exit` it receives.
  */
 export interface LSPTransportInterface {
 	readonly emitter: EmitterInterface<LSPTransportEventMap>

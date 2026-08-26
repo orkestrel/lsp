@@ -40,9 +40,10 @@ its emitter. The `send()` and `close()` methods reject instead of throwing. Afte
 `send()` resolves `false`. The client can call `start()` again only after `close()` resolves or the
 transport emits `exit`. A transport that cannot reconnect rejects that later `start()` call.
 
-Each `start()` call opens a generation, and an implementation emits `chunk`, `exit`, and `error`
-only for the current one, emitting `exit` at most once for it. The client trusts every `exit` it
-receives, so an implementation whose peer can outlive its own `close()` owns that obligation.
+Each accepted `start()` call opens a generation, and an implementation emits `chunk`, `exit`, and
+`error` only for the current one, emitting `exit` at most once for it. The client trusts every
+`exit` it receives, so an implementation whose peer can outlive its own `close()` owns that
+obligation.
 
 The client also defends against a foreign transport that throws synchronously. It converts a send
 fault into a coded `LSPError`, bounds exit and close settlement, and removes transport listeners
@@ -88,13 +89,16 @@ called while the first is in flight settles on that same termination rather than
 When the helper cannot confirm the child stopped, `close()` rejects with an `LSPError` whose `code`
 property is `timeout`, and the transport keeps the still-live child.
 
-Each `start()` call opens a generation that owns its child, and only the current generation reaches
-the emitter. `start()` spawns the configured child and resolves after the host reports it spawned.
-The transport reconnects: after `close()` resolves, or after the child exits on its own and the
-transport emits `exit`, a further `start()` call spawns a fresh child, and the retired generation
-delivers neither a later `exit` nor a later chunk. A `start()` call made while a child is still live,
-or while a `close()` is still in flight, is refused with an `LSPError` whose `code` property is
-`duplicate`. An empty command, a host that refuses the spawn, and a child that reports a spawn fault
+Each accepted `start()` call opens a generation that owns its child, and only the current generation
+reaches the emitter. `start()` spawns the configured child and resolves after the host reports it
+spawned. The transport reconnects: after `close()` resolves, or after the child exits on its own and
+the transport emits `exit`, a further `start()` call spawns a fresh child, and the retired generation
+delivers neither a later `exit` nor a later chunk. A `start()` call made while the previous child
+still owns the current generation is refused with an `LSPError` whose `code` property is `duplicate`,
+which covers a live child, a child that ended on its own while a grandchild holding its standard
+output defers the host's `close`, and a `close()` still in flight. Leave that window through
+`close()`, whose wait for the child's stdio is bounded by `grace`, or by waiting for the `exit`
+event. An empty command, a host that refuses the spawn, and a child that reports a spawn fault
 each reject `start()` with one coded `spawn`. `send()` writes bytes to the child's standard input and
 reports whether it accepted them, resolving `false` before the first `start()`, after `close()`
 resolves, and after the child exits.

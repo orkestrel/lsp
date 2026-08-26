@@ -7,6 +7,7 @@ import {
 	collectPeerMessages,
 	createHolderOptions,
 	createPeerOptions,
+	readPeerNumber,
 	readPeerPid,
 	readPeerResult,
 	readPeerShapes,
@@ -23,6 +24,7 @@ const PEER = { budget: 5_000 }
 const PING = encodeLSPMessage({ jsonrpc: '2.0', method: 'probe/ping' })
 const ECHO = encodeLSPMessage({ jsonrpc: '2.0', id: 1, method: 'probe/echo', params: {} })
 const HOLD = encodeLSPMessage({ jsonrpc: '2.0', id: 2, method: 'probe/hold', params: {} })
+const ORPHAN = encodeLSPMessage({ jsonrpc: '2.0', id: 3, method: 'probe/orphan', params: {} })
 
 describe('StdioTransport', () => {
 	it('rejects an empty command as a spawn failure', async () => {
@@ -262,7 +264,10 @@ describe('StdioTransport', () => {
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		const generations: number[] = []
-		for (const ending of ['close', 'exit']) {
+		// The endings run close, unprompted exit, close: each iteration waits for the exit its own
+		// ending produced before the next start, so the third start is the restart that follows a
+		// natively ended generation rather than a cooperative close.
+		for (const ending of ['close', 'exit', 'close']) {
 			chunks.clear()
 			await transport.start()
 			await transport.send(ECHO)
@@ -283,9 +288,8 @@ describe('StdioTransport', () => {
 				PEER,
 			)
 		}
-		const [first, second] = generations
-		expect(first).toBeGreaterThan(0)
-		expect(second).not.toBe(first)
+		expect(generations).toHaveLength(3)
+		expect(new Set(generations).size).toBe(generations.length)
 		for (const pid of generations) await waitForReaped(pid)
 	}, 15_000)
 
@@ -306,14 +310,68 @@ describe('StdioTransport', () => {
 				() => readPeerResult(collectPeerMessages(chunks.calls.flat()), 'grandchild') !== undefined,
 				PEER,
 			)
-			const held = readPeerResult(collectPeerMessages(chunks.calls.flat()), 'grandchild')
+			const held = readPeerNumber(collectPeerMessages(chunks.calls.flat()), 'grandchild')
 			await transport.close()
 			expect(exits.count).toBe(1)
 			chunks.clear()
 			await transport.start()
 			await waitForCondition('the replacement ready frame', () => chunks.count >= 1, PEER)
 			scratch.write('release', '')
-			await waitForReaped(typeof held === 'number' ? held : 0)
+			await waitForReaped(held)
+			await transport.send(ECHO)
+			await waitForCondition(
+				'the replacement echo response',
+				() => readPeerResult(collectPeerMessages(chunks.calls.flat()), 'pid') !== undefined,
+				PEER,
+			)
+			expect(readPeerShapes(collectPeerMessages(chunks.calls.flat()))).not.toContain('grandchild')
+			expect(exits.count).toBe(1)
+		} finally {
+			await transport.close()
+			await destroyScratch(scratch)
+		}
+	}, 30_000)
+
+	it('refuses a replacement while a natively exited child still owns its generation', async () => {
+		const scratch = createScratch({ prefix: 'lsp-orphan-' })
+		const release = join(scratch.path, 'release')
+		const chunks = createRecorder<[Uint8Array]>()
+		const exits = createRecorder<[LSPExit]>()
+		const transport = new StdioTransport(createHolderOptions(release, 200))
+		transport.emitter.on('chunk', chunks.handler)
+		transport.emitter.on('exit', exits.handler)
+		await transport.start()
+		try {
+			await waitForCondition('the holder ready frame', () => chunks.count >= 1, PEER)
+			await transport.send(ORPHAN)
+			await waitForCondition(
+				'the orphan report',
+				() => readPeerResult(collectPeerMessages(chunks.calls.flat()), 'grandchild') !== undefined,
+				PEER,
+			)
+			const held = readPeerNumber(collectPeerMessages(chunks.calls.flat()), 'grandchild')
+			// The zombie window: the child has ended natively, its grandchild still holds the pipe
+			// that defers `close`, and the transport has therefore retired nothing.
+			await waitForCondition(
+				'the child to stop accepting bytes',
+				async () => {
+					return !(await transport.send(PING))
+				},
+				PEER,
+			)
+			expect(exits.count).toBe(0)
+			const refusal = await transport.start().then(
+				() => undefined,
+				(error: unknown) => error,
+			)
+			expect(isLSPError(refusal)).toBe(true)
+			expect(isLSPError(refusal) ? refusal.code : undefined).toBe('duplicate')
+			scratch.write('release', '')
+			await waitForReaped(held)
+			await waitForCondition('the child exit event', () => exits.count === 1, PEER)
+			chunks.clear()
+			await transport.start()
+			await waitForCondition('the replacement ready frame', () => chunks.count >= 1, PEER)
 			await transport.send(ECHO)
 			await waitForCondition(
 				'the replacement echo response',
