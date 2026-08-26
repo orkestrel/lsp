@@ -1,0 +1,5 @@
+{
+  "file": "src/core/helpers.ts",
+  "from": "\t\t\t\tif (replacement !== undefined && replacement !== candidate && !child) {\n",
+  "to": "\t\t\t\tif (replacement !== undefined && replacement !== candidate) {\n"
+}

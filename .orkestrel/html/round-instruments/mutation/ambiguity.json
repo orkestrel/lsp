@@ -1,0 +1,5 @@
+{
+  "file": "src/core/helpers.ts",
+  "from": "\t\t\telse if (source !== current) derivations.set(rewritten, undefined)\n\t\t\tif (rewritten !== candidate) {\n\t\t\t\tif (!derivations.has(rewritten)) derivations.set(rewritten, current)\n\t\t\t\telse if (derivations.get(rewritten) !== current) derivations.set(rewritten, undefined)\n\t\t\t}\n",
+  "to": "\t\t\tif (rewritten !== candidate) {\n\t\t\t\tif (!derivations.has(rewritten)) derivations.set(rewritten, current)\n\t\t\t}\n"
+}
