@@ -10,7 +10,13 @@ import { LSPClient } from './LSPClient.js'
  *
  * @example
  * ```ts
- * const client = createLSPClient({ transport, workspace: 'file:///workspace' })
+ * import type { LSPTransportInterface } from './types.js'
+ * import { pathToFileURL } from 'node:url'
+ *
+ * declare const transport: LSPTransportInterface
+ * declare const directory: string
+ *
+ * const client = createLSPClient({ transport, workspace: pathToFileURL(directory).href })
  * await client.start()
  * ```
  */

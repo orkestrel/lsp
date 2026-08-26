@@ -46,10 +46,17 @@ import {
  *
  * @example
  * ```ts
- * const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+ * import type { LSPTransportInterface } from './types.js'
+ * import { join } from 'node:path'
+ * import { pathToFileURL } from 'node:url'
+ *
+ * declare const transport: LSPTransportInterface
+ * declare const directory: string
+ *
+ * const client = new LSPClient({ transport, workspace: pathToFileURL(directory).href })
  * await client.start()
  * const signal = AbortSignal.timeout(30_000)
- * const uri = 'file:///workspace/main.ts'
+ * const uri = pathToFileURL(join(directory, 'main.ts')).href
  * const diagnostics = await client.open(
  * 	{
  * 		uri,

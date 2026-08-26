@@ -25,19 +25,27 @@ notification rejects the call with an `LSPError` coded `aborted`, leaves the cli
 leaves the document owned until `close()` succeeds. The `timeout` option does not bound a
 diagnostics wait. Arm the signal you pass to `open()` to bound one.
 
+The `workspace` option is an opaque URI. The client forwards it as `rootUri` and never parses it, so
+the caller owns its spelling. Derive it from a filesystem path rather than writing the URI by hand:
+on a Node host `pathToFileURL` produces the `file:` URI that host's paths actually yield, including
+the drive-letter form a Windows path takes. Derive each document URI the same way.
+
 Use the published client factory with any transport that implements the byte seam:
 
 ```ts
 import type { LSPTransportInterface } from '@orkestrel/lsp'
 import { createLSPClient } from '@orkestrel/lsp'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 declare const transport: LSPTransportInterface
+declare const directory: string
 
-const client = createLSPClient({ transport, workspace: 'file:///workspace' })
+const client = createLSPClient({ transport, workspace: pathToFileURL(directory).href })
 await client.start()
 
 const signal = AbortSignal.timeout(30_000)
-const uri = 'file:///workspace/main.ts'
+const uri = pathToFileURL(join(directory, 'main.ts')).href
 
 const diagnostics = await client.open(
 	{
@@ -103,12 +111,15 @@ environment; the current directory and this process's environment apply when eit
 ```ts
 import { createLSPClient } from '@orkestrel/lsp'
 import { createStdioTransport } from '@orkestrel/lsp/server'
+import { pathToFileURL } from 'node:url'
+
+declare const directory: string
 
 const transport = createStdioTransport({
-	server: { command: ['my-language-server', '--stdio'], directory: '/workspace' },
+	server: { command: ['my-language-server', '--stdio'], directory },
 	grace: 5_000,
 })
-const client = createLSPClient({ transport, workspace: 'file:///workspace' })
+const client = createLSPClient({ transport, workspace: pathToFileURL(directory).href })
 await client.start()
 await client.destroy()
 ```

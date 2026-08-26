@@ -9,8 +9,13 @@ import { StdioTransport } from './transports/StdioTransport.js'
  *
  * @example
  * ```ts
+ * import { createLSPClient } from '../core/factories.js'
+ * import { pathToFileURL } from 'node:url'
+ *
+ * declare const directory: string
+ *
  * const transport = createStdioTransport({ server: { command: ['my-server', '--stdio'] } })
- * const client = createLSPClient({ transport, workspace: 'file:///workspace' })
+ * const client = createLSPClient({ transport, workspace: pathToFileURL(directory).href })
  * await client.start()
  * ```
  */
