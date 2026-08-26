@@ -216,11 +216,6 @@ export class LSPClient implements LSPClientInterface {
 		try {
 			if (!this.#ownsGeneration(generation))
 				throw new LSPError('The LSP transport is closed', { code: 'closed' })
-			if (this.#signal?.aborted === true)
-				throw new LSPError('The LSP client was aborted', {
-					code: 'aborted',
-					cause: this.#signal.reason,
-				})
 			const capabilities = {
 				general: { positionEncodings: ['utf-16'] },
 				textDocument: {

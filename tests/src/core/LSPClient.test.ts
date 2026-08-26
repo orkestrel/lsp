@@ -1275,6 +1275,29 @@ describe('LSPClient', () => {
 		await client.destroy()
 	})
 
+	it('rejects a start superseded by an abort as closed', async () => {
+		const controller = new AbortController()
+		const transport = new LSPFixtureTransport({ defer: true })
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			signal: controller.signal,
+		})
+		const first = client.start()
+		first.catch(() => {})
+		await waitForDelay()
+
+		controller.abort('stop')
+		transport.release()
+
+		await expect(first).rejects.toMatchObject({ code: 'closed' })
+		expect(
+			transport.messages.filter(
+				(message) => isJSONRPCRequest(message) && message.method === LSP_METHODS.initialize,
+			),
+		).toHaveLength(0)
+	})
+
 	it('detaches a drained publication deadline before the next generation', async () => {
 		const transport = new LSPFixtureTransport()
 		const client = new LSPClient({
