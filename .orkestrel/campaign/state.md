@@ -26,9 +26,9 @@ known open unit, not a regression to diagnose.
 | `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `42e0b1e` | **ACCEPTED and pushed.** The P round — the lsp adoption, the L6-E inspection-bound rewire, and the P1.1 gauge restore — committed as one behind a green chain. |
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
-| `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `8c3a787` | Accepted and pushed. The vendored lint exclusion for the campaign archive; a release bump is registered for it. |
+| `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `c51d7ce` | Accepted and pushed. The vendored lint exclusion for the campaign archive and the bench write-root rule in the host inventory's orchestration contract, with the inventory digests regenerated. A release bump is registered for that moved vendored surface; every target re-pins and runs `repair` after it publishes. |
 | `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `f1632ad` | **CHECKPOINTED, mid-round.** The era sweep and the contract surface are committed and pushed. One red row stands by design: the guides parity project's `documents every barrel export` names the six symbols the contract added, and the queued `m4-guide` unit closes it. See the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | see the H2 section | **CHECKPOINTED, mid-round, audit FAILED.** The whole H2 provenance round plus its first fix unit are committed; the remaining fix units are queued. See the H2 section. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `d310eea` | **CHECKPOINTED, mid-round, audit FAILED.** The whole H2 provenance round plus the `h2.1-derive` fix are committed and pushed behind a fully green gate chain. The round is not accepted: three fix units and the `h2.1` audit remain. See the H2 section. |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | lockfile commits | Clean and pushed. Not campaign subjects; they carry only the scaffold re-pin. |
 
 ## Wave status
@@ -116,7 +116,7 @@ session. Its rulings in brief:
 
 | Unit | Role and engine | Standing |
 |---|---|---|
-| `h2.1-derive` | `sol` — Sol bench | **Running.** R2 and R3. Brief: `tmp/codex/h2.1-derive-brief.md`. Auditor: Opus `reviewer`. |
+| `h2.1-derive` | `sol` — Sol bench | **Landed** in the checkpoint. R2 and R3, each red-first: the derivation walk stops at the direct input boundary, and a zero-width abutment projects through the later segment. `check` exit 0 and `src:core` `592 passed`. Records: `markdown/h2.1-derive-brief.md`, `-report.md`. **Its audit has not run** — the Opus `reviewer` lane is the next markdown dispatch. The unit flags one claim for that reviewer: a current rewrite never needs a second derivation edge, because the source handle's span map has already resolved earlier rewrites. |
 | `h2.2-prose` | `implementer` — Opus native | Queued. R1 and the type openers from R5. Auditor: Sol `analyst`. |
 | `h2.3-fences` | `implementer` — Opus native | Queued, after `h2.2-prose`. R4. Auditor: Sol `analyst`. |
 | `h2.4-mechanical` | `builder` — Sonnet | Queued. R6 and the scan-leaf TSDoc from R5. Auditor: `checker`. |
@@ -128,9 +128,15 @@ One Sol lane at a time through `codex exec` script files written in the session 
 journals under `tmp/codex/` in THIS repository, one Monitor per exec filtered to milestones and
 exiting on the terminal event. **A bench design lane always gets a lane-assignment cover
 prepended to the shared brief** — a raw shared brief makes Sol simulate both lanes and reconcile
-itself. Native Opus and Sonnet lanes dispatch through the Agent tool. Writers serialize per
-checkout; parallel writers run only across disjoint checkouts, which is how the mcp and markdown
-fix units run beside each other.
+itself. **A bench unit writes only under its own `--cd` root and the system temporary
+directory**, so a report path in this repository is rejected after the work is done; name the
+report inside the unit's own tree or take it from the `--output-last-message` file, and let the
+Orchestrator copy it into `.orkestrel/<package>/`. That rule is landed in the scaffold host
+inventory's `.agents/orchestration.md`, the vendored source every repository receives.
+
+Native Opus and Sonnet lanes dispatch through the Agent tool. Writers serialize per checkout;
+parallel writers run only across disjoint checkouts, which is how the mcp and markdown fix units
+ran beside each other.
 
 ## Only the user can decide
 
