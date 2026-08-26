@@ -133,6 +133,20 @@ and the objective lane's MAJOR are the same finding and share the `h2.3-fences` 
 `h2.1-derive` runs first because the prose must describe corrected behavior. `h2.3-fences` runs
 after `h2.2-prose` for the same reason. Each unit's auditor is an engine that did not write it.
 
+## Amendment 2026-08-26 — the derivation sentence in the exit criterion
+
+The exit criterion's opening clause, "the derivation chain answers only with the subject node's
+own region or `undefined`", is superseded. Read literally it forbids a one-source replacement
+from inheriting its input's region, which the guide fixes as contract
+(`guides/markdown.md:316-319`) and the round-landed row at
+`tests/src/core/Markdown.test.ts:228-240` pins as `{ start: 9, end: 13 }`. The clause now reads:
+**the derivation resolution answers from the subject node's own region, else from the region of
+the direct input the current rewrite names for it, else `undefined`, and never follows a further
+derivation edge** — the rule R2's ruling body prescribes and the accepted `h2.1-derive` unit
+ships. The `h2.2-prose` and `h2.3-fences` units read this amendment, not the superseded clause.
+Provenance: the `h2.1-derive` reviewer verdict's referral, verified by the Orchestrator against
+the cited guide and test lines. Every other clause of the exit criterion stands unchanged.
+
 **Fix-round exit criterion.** The round commits when: the derivation chain answers only with the
 subject node's own region or `undefined`, proven by the objective lane's counterexample as a
 red-first row; `projectSpan` resolves a zero-width boundary to the later segment, proven

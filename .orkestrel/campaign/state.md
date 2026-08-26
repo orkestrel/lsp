@@ -1,4 +1,9 @@
-# Campaign state — pickup record, refreshed 2026-08-26
+# Campaign state — pickup record, refreshed 2026-08-26 (resumed session)
+
+The resumed session's bench liveness, engine configuration, container facts, routing ledger, and
+rulings are in `routing-2026-08-26-resume.md` beside this file. Both benches probed live on
+bounded round-tripped calls; the container came up with no installed dependencies, so `npm ci`
+runs per checkout before any gate.
 
 Read this beside `plan.md` (the ruled plan and routing) and `audit.md` (the original ten-repo
 audit report). This file is the session-boundary snapshot: what is accepted, what is in flight,
@@ -27,8 +32,8 @@ known open unit, not a regression to diagnose.
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
 | `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `c51d7ce` | Accepted and pushed. The vendored lint exclusion for the campaign archive and the bench write-root rule in the host inventory's orchestration contract, with the inventory digests regenerated. A release bump is registered for that moved vendored surface; every target re-pins and runs `repair` after it publishes. |
-| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `f1632ad` | **CHECKPOINTED, mid-round.** The era sweep and the contract surface are committed and pushed. One red row stands by design: the guides parity project's `documents every barrel export` names the six symbols the contract added, and the queued `m4-guide` unit closes it. See the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `d310eea` | **CHECKPOINTED, mid-round, audit FAILED.** The whole H2 provenance round plus the `h2.1-derive` fix are committed and pushed behind a fully green gate chain. The round is not accepted: three fix units and the `h2.1` audit remain. See the H2 section. |
+| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `2b823f9` | **CHECKPOINTED, mid-round.** The era sweep, the contract surface, and the conformance mirror are committed and pushed. The mirror checkpoint's red rows — the formatter on the vendored mirror and the `TaskStatusNotificationParams metadata` row — are closed by the `m4-mirror.1` successor in flight; the guides parity red row stands by design for `m4-guide`. See the M4 section. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `d310eea` | **Mid-round, fix round running.** The `h2.1-derive` fix is audited PASS by the Opus `reviewer` and accepted (`markdown/h2.1-audit-verdict.md`); the exit criterion's derivation clause is amended in `h2-audit-reconciliation.md`. The `h2.2-prose` unit is in flight as the sole writer; `h2.3` and `h2.4` follow. See the H2 section. |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | lockfile commits | Clean and pushed. Not campaign subjects; they carry only the scaffold re-pin. |
 
 ## Wave status
@@ -66,7 +71,7 @@ Unit progress, serial:
 | `m4-era` | **Landed** in the tree. Prose only — every draft-era claim replaced with the stable `2026-07-28` snapshot fact across source and tests. Gates green at the time it ran. Record: `mcp/m4-era-brief.md`, `-report.md`, `-diff.txt`, `-status.txt`. |
 | `m4-contract` | **Landed** in the tree with a scoped deviation. The whole surface and all four drift repairs are in, each red-first. Three rows in files the brief made off-limits became false; the unit returned exact patches rather than editing them. Record: `mcp/m4-contract-brief.md`, `-report.md`, `-diff.txt`, `-status.txt`. |
 | `m4-contract.1` | **Landed.** A `builder` unit applied those three patches verbatim; `check` and `test:src:core` returned to exit 0 with `772 passed`. Record: `mcp/m4-contract.1-brief.md`, `-report.md`. |
-| `m4-mirror` | Queued, Sol bench. Vendor `ext-tasks-2026-07-28-schema.json` byte-identical with its SHA-256 `bf30afb7ac251e3e22c037b7a685f60ef6603031b5484c0d08b1fa0bbe86d460` pinned, and build the comparison rows. |
+| `m4-mirror` | **Checkpointed at `2b823f9` with a deviation.** The mirror is vendored byte-identical with the digest pinned, the row arrays and drift helper landed, and the outside-membership control ran red and was removed. The unit stopped on its contract: the published scaffold 0.0.53 `prettierignore` lacks the `tests/mirrors/` exclusion, and one row (`TaskStatusNotificationParams metadata`) disagrees with the schema's `$defs` nesting. Record: `mcp/m4-mirror-brief.md`, `-deviation.md`, `-conformance-red.txt`. The `m4-mirror.1` successor (Sol bench, in flight) adds the inventory-identical ignore block, fixes its row, and re-runs the acceptance sequence. |
 | `m4-stream` | Queued, Sol bench. The matcher branch, the guarded admission, the `tasks: boolean` parameter, the derived support fact, the authorize-and-omit acknowledgement. |
 | `m4-proof` | Queued, Opus native. A real fixture producer through `subscription.listen` reaching a real client stream, plus the question-2 invariants. |
 | `m4-guide` | Queued, Opus native. `guides/mcp.md` — the era sweep's guide half, the entitlement ruling, the delivery guarantee, the composing-envelope conformance gap. |
@@ -116,8 +121,8 @@ session. Its rulings in brief:
 
 | Unit | Role and engine | Standing |
 |---|---|---|
-| `h2.1-derive` | `sol` — Sol bench | **Landed** in the checkpoint. R2 and R3, each red-first: the derivation walk stops at the direct input boundary, and a zero-width abutment projects through the later segment. `check` exit 0 and `src:core` `592 passed`. Records: `markdown/h2.1-derive-brief.md`, `-report.md`. **Its audit has not run** — the Opus `reviewer` lane is the next markdown dispatch. The unit flags one claim for that reviewer: a current rewrite never needs a second derivation edge, because the source handle's span map has already resolved earlier rewrites. |
-| `h2.2-prose` | `implementer` — Opus native | Queued. R1 and the type openers from R5. Auditor: Sol `analyst`. |
+| `h2.1-derive` | `sol` — Sol bench | **ACCEPTED.** The Opus `reviewer` audit returned `PASS — 6 of 6 confirmed` on Orchestrator-produced evidence (isolated diff, green rows, revert-proof controls reddening exactly the named rows, `src:core` `592 passed`). Records: `markdown/h2.1-audit-brief.md`, `-evidence.md`, `-instrument.sh`, `h2.1-derive-diff.txt`, `h2.1-audit-reviewer-verdict.md`, `h2.1-audit-verdict.md`. The verdict's referral is landed as Amendment 2026-08-26 in `h2-audit-reconciliation.md`: the exit criterion's derivation clause now names the direct-input rule. |
+| `h2.2-prose` | `implementer` — Opus native | **In flight** as the sole markdown writer, briefed against the amendment. R1 and the type openers from R5. Brief: `markdown/h2.2-prose-brief.md`. Auditor: Sol `analyst`. |
 | `h2.3-fences` | `implementer` — Opus native | Queued, after `h2.2-prose`. R4. Auditor: Sol `analyst`. |
 | `h2.4-mechanical` | `builder` — Sonnet | Queued. R6 and the scan-leaf TSDoc from R5. Auditor: `checker`. |
 | `h2.5-gates` | `verifier` | Queued. |
