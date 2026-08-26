@@ -1,0 +1,196 @@
+diff --git a/guides/mcp.md b/guides/mcp.md
+index 89c7891..d764394 100644
+--- a/guides/mcp.md
++++ b/guides/mcp.md
+@@ -903,6 +903,11 @@ bound. That is a client-side bound, not transport backpressure — see
+ [Declared conformance gaps](#declared-conformance-gaps) for what a duplex carrier delivers
+ incrementally and what an HTTP one does not.
+ 
++A `capacity` that is not a positive integer is refused: the client throws `MCPError` `-32602`.
++The refusal lands on the FIRST READ, because the body is a generator and nothing in it runs
++until then, and it lands before the request is built or written — so the transport carries no
++`subscriptions/listen` frame for a subscription refused this way.
++
+ ```ts
+ import {
+ 	type MCPSubscriptionResult,
+@@ -921,7 +926,8 @@ const stream = client.listen(
+ 
+ const opened = await stream.next()
+ opened.done // false — the acknowledgement is a yield
+-opened.value.method // 'notifications/subscriptions/acknowledged'
++// The yield arm carries the notification; narrow on `done` before reading its member.
++if (opened.done === false) opened.value.method // 'notifications/subscriptions/acknowledged'
+ 
+ let closure: MCPSubscriptionResult | undefined
+ for (;;) {
+@@ -2128,7 +2134,7 @@ Passing a legacy revision to
+ | `MCPRequestFunction`               | type      | `(method, params, deadline) => Promise<unknown>` — the correlated-request door an `MCPTaskClientInterface` issues through. It resolves the peer's `result` UNVALIDATED and rejects with an `MCPError` for an error response.                                                                                                                                                                                                                                                                                                                                   |
+ | `MCPTaskClientOptions`             | interface | `{ request; timeout? }` — construction options for `MCPTaskClient`; an omitted `timeout` leaves every task request unbounded.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+ | `MCPTaskClientInterface`           | interface | The extension's client half — the `task` / `update` / `abort` methods. `MCPTaskManagerInterface` minus `start`, because creation is never the client's decision, and with the same missing plural accessor.                                                                                                                                                                                                                                                                                                                                                    |
+-| `MCPClientInterface`               | interface | `emitter` / `connected` / `version` / `transport` / `tasks` data members + the `connect` / `discover` / `disconnect` / `tools` / `call` methods.                                                                                                                                                                                                                                                                                                                                                                                                               |
++| `MCPClientInterface`               | interface | `emitter` / `connected` / `version` / `transport` / `tasks` data members + the `connect` / `discover` / `disconnect` / `tools` / `listen` / `call` methods.                                                                                                                                                                                                                                                                                                                                                                                                    |
+ 
+ The `emitter`, `identity`, `methods`, and `limit` members of `MCPServerInterface` are
+ `readonly` data members (Surface rows, above) — its call-signature methods
+@@ -3856,8 +3862,8 @@ failures invites over-reading in a way a run with ten did not. These bounds fix
+ - It says nothing about **this package's own client consuming a held-open exchange**. The
+   runner's client consumes one and reports it (`server-sse-multiple-streams`, 2 passed / 0
+   failed), so the server half is exactly what that scenario proves; `MCPClient.listen` is
+-  proven by this package's own tests over a duplex carrier instead — see the entry below for
+-  the carrier limit that survives.
++  proven by this package's own tests over a duplex carrier instead — see the following entry
++  for the carrier limit that survives.
+ - It is a **protocol conformance runner, not an IDE integration**. Passing it is evidence
+   about the wire, not evidence that any particular host application can drive this server.
+ - It proves **nothing about the browser face**. Not one byte of `@orkestrel/mcp/browser`
+diff --git a/tests/guides.test.ts b/tests/guides.test.ts
+index 3a36c3a..38059a5 100644
+--- a/tests/guides.test.ts
++++ b/tests/guides.test.ts
+@@ -16,6 +16,7 @@ import {
+ 	createMCPLegacy,
+ 	createMCPLegacyClientTransport,
+ 	createMCPServer,
++	isMCPError,
+ 	isMCPSubscriptionResult,
+ 	MCP_META_SUBSCRIPTION,
+ } from '@src/core'
+@@ -1154,6 +1155,8 @@ const GUIDE_UNSTAMPED_NOTIFICATION: JSONRPCNotification = {
+ /** What one run of the fence's reads observed, in the order the fence reads them. */
+ interface GuideSubscriptionReading {
+ 	readonly opened: IteratorResult<JSONRPCNotification, MCPSubscriptionResult>
++	/** The method the fence reads behind its `opened.done === false` guard. */
++	readonly acknowledged: string | undefined
+ 	readonly frames: readonly string[]
+ 	readonly closure: MCPSubscriptionResult | undefined
+ 	readonly proven: boolean
+@@ -1188,6 +1191,10 @@ async function readGuideSubscription(): Promise<GuideSubscriptionReading> {
+ 		capacity: 16,
+ 	})
+ 	const opened = await stream.next()
++	// The fence's own narrowing, transcribed: the member read sits behind `opened.done === false`,
++	// so a run where the first read is not a yield reports no method rather than reading one.
++	let acknowledged: string | undefined
++	if (opened.done === false) acknowledged = opened.value.method
+ 
+ 	// Both injections ride the same transport door, while the subscription is live: the stamped
+ 	// one must enter the stream and the unstamped one must not.
+@@ -1220,7 +1227,42 @@ async function readGuideSubscription(): Promise<GuideSubscriptionReading> {
+ 	if (terminal.done === true) closure = terminal.value
+ 	subscription.abort()
+ 	await client.disconnect()
+-	return { opened, frames, closure, proven: isMCPSubscriptionResult(closure), unstamped }
++	return {
++		opened,
++		acknowledged,
++		frames,
++		closure,
++		proven: isMCPSubscriptionResult(closure),
++		unstamped,
++	}
++}
++
++/** What one run of the section's bad-`capacity` clause observed. */
++interface GuideCapacityReading {
++	/** The reason the first read rejected with, or `undefined` when that read resolved. */
++	readonly refusal: unknown
++	/** Every method the transport carried up to and including that read. */
++	readonly methods: readonly string[]
++}
++
++/** Drive the capacity clause: a `capacity` below one fails the first read, before any write. */
++async function readGuideCapacityRefusal(): Promise<GuideCapacityReading> {
++	const source = new TransformStream<JSONRPCNotification, JSONRPCNotification>()
++	const transport = createLoopbackTransport(
++		createSubscriptionServer(() => source.readable, GUIDE_SUBSCRIPTION_FILTER),
++	)
++	const client = createMCPClient({ transport })
++	await client.connect()
++
++	const stream = client.listen(GUIDE_SUBSCRIPTION_FILTER, {
++		signal: new AbortController().signal,
++		capacity: 0,
++	})
++	// The read is settled rather than awaited: the clause's subject is WHICH way it settles.
++	const [read] = await Promise.allSettled([stream.next()])
++	const methods = transport.messages.map((message) => message.method)
++	await client.disconnect()
++	return { refusal: read.status === 'rejected' ? read.reason : undefined, methods }
+ }
+ 
+ /** The families the burst reading asks for and the server honours, so every write matches. */
+@@ -1269,9 +1311,7 @@ describe('guides/mcp.md § Consume a subscription from a client — what the str
+ 		const reading = await readGuideSubscription()
+ 
+ 		expect(reading.opened.done).toBe(false)
+-		expect(reading.opened.value).toMatchObject({
+-			method: 'notifications/subscriptions/acknowledged',
+-		})
++		expect(reading.acknowledged).toBe('notifications/subscriptions/acknowledged')
+ 		expect(reading.frames).toEqual([
+ 			'notifications/prompts/list_changed',
+ 			'notifications/tools/list_changed',
+@@ -1295,4 +1335,15 @@ describe('guides/mcp.md § Consume a subscription from a client — what the str
+ 	it('delivers every frame that arrived before the first read', async () => {
+ 		expect(await readBurstSubscription()).toEqual(BURST_METHODS)
+ 	})
++
++	// The section states a refusal — `-32602` on the first read, before anything is sent — and a
++	// substring check would pass whatever the client did. So the refusal is executed: its coded
++	// error is read, and the transport's own record answers whether the request was written.
++	it('refuses a capacity below one on the first read and sends nothing', async () => {
++		const reading = await readGuideCapacityRefusal()
++
++		expect(reading.refusal).toMatchObject({ code: -32602 })
++		expect(isMCPError(reading.refusal)).toBe(true)
++		expect(reading.methods).toEqual(['server/discover'])
++	})
+ })
+diff --git a/tests/src/core/MCPClient.test.ts b/tests/src/core/MCPClient.test.ts
+index 3291708..6da5190 100644
+--- a/tests/src/core/MCPClient.test.ts
++++ b/tests/src/core/MCPClient.test.ts
+@@ -3597,6 +3597,42 @@ describe('MCPClient — subscriptions/listen', () => {
+ 		await expect(stream.next()).rejects.toThrow('subscription frame queue overflow')
+ 	})
+ 
++	// A subscription carries no request deadline: the configured `timeout` bounds a correlated
++	// request, and a stream that outlives it is the guide's claim rather than an accident. The
++	// read is parked BEFORE the wait, so a deadline registered on this subscription would settle
++	// it while nothing was written, and the frame that follows would arrive too late.
++	it('delivers to a read parked past the configured request deadline', async () => {
++		const source = new TransformStream<JSONRPCNotification, JSONRPCNotification>()
++		const transport = createLoopbackTransport(createSubscriptionServer(() => source.readable))
++		const client = createMCPClient({ transport, timeout: 25 })
++		await client.connect()
++		const stream = client.listen(
++			{ toolsListChanged: true },
++			{ signal: new AbortController().signal },
++		)
++		await stream.next()
++		const parked = Promise.allSettled([stream.next()])
++
++		await waitForDelay(50)
++		await source.writable
++			.getWriter()
++			.write({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' })
++
++		expect(await parked).toEqual([
++			{
++				status: 'fulfilled',
++				value: {
++					done: false,
++					value: {
++						jsonrpc: '2.0',
++						method: 'notifications/tools/list_changed',
++						params: { _meta: { [MCP_META_SUBSCRIPTION]: 2 } },
++					},
++				},
++			},
++		])
++	})
++
+ 	it('rejects a parked subscription read when the client disconnects', async () => {
+ 		const source = new TransformStream<JSONRPCNotification, JSONRPCNotification>()
+ 		const transport = createLoopbackTransport(createSubscriptionServer(() => source.readable))

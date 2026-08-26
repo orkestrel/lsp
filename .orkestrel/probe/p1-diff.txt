@@ -1,0 +1,839 @@
+diff --git a/guides/probe.md b/guides/probe.md
+index 29a15b8..e3cbd73 100644
+--- a/guides/probe.md
++++ b/guides/probe.md
+@@ -152,7 +152,7 @@ The classes, each exported from its own file.
+ | `Probe`        | class | `ProbeInterface`       | The coordinator: per-stage queues, active-inspection deadlines, and the receipt decision. Construction begins warming, installs initial listeners, selects the target workspace, and applies the inspection deadline from its options. [`Probe.ts`](../src/server/Probe.ts) |
+ | `ProbeServer`  | class | `ProbeServerInterface` | The process owner: construction creates the probe it serves, passes every option to that probe, and binds this process's stdio and termination signals. [`ProbeServer.ts`](../src/server/ProbeServer.ts)                                                                    |
+ | `TypeStage`    | class | `TypeStageInterface`   | A resident TypeScript language service per project, reading candidates from memory. [`TypeStage.ts`](../src/server/stages/TypeStage.ts)                                                                                                                                     |
+-| `LintStage`    | class | `StageInterface`       | A resident Oxlint language server, driven over the Language Server Protocol. [`LintStage.ts`](../src/server/stages/LintStage.ts)                                                                                                                                            |
++| `LintStage`    | class | `StageInterface`       | A resident Oxlint language server, driven over the Language Server Protocol by the `@orkestrel/lsp` client and its stdio transport. [`LintStage.ts`](../src/server/stages/LintStage.ts)                                                                                     |
+ | `RuntimeStage` | class | `StageInterface`       | A resident Vitest service that writes one fresh specification per inspection. [`RuntimeStage.ts`](../src/server/stages/RuntimeStage.ts)                                                                                                                                     |
+ | `Overlay`      | class | `OverlayInterface`     | The candidate set one inspection holds in memory, under an identity minted fresh per instance. [`Overlay.ts`](../src/server/Overlay.ts)                                                                                                                                     |
+ 
+@@ -186,7 +186,6 @@ Pure leaves and workspace readers, from [`helpers.ts`](../src/server/helpers.ts)
+ | `inferDocumentLanguage`    | function | `(path: string) => string`                                                                  | Selects the Language Server Protocol language identifier a path's extension names.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+ | `createRevisionFile`       | function | `(workspace: string, path: string, revision: string) => string`                             | Builds the fresh sibling path one runtime inspection writes its specification to.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+ | `matchesWorkspaceModule`   | function | `(path: string) => boolean`                                                                 | Reports whether a path is a script, TypeScript, Vue, or JSON module Vitest can cache.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+-| `parseContentLength`       | function | `(header: string) => number \| undefined`                                                   | Reads a Language Server Protocol frame's declared byte length, or `undefined` for an invalid header.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+ | `describeUnknown`          | function | `(value: unknown) => string`                                                                | Normalizes a caught or foreign error into readable text.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+ | `guardStage`               | function | `<T>(stage: Stage, operation: Promise<T>) => Promise<T>`                                    | Guards one resident-stage operation, passing a `ProbeError` through unchanged and translating every other failure to `instrument`/`malformed` with the original fault on `cause`.                                                                                                                                                                                                                                                                                                                                                                                                             |
+ | `findRefusedPaths`         | function | `(value: unknown) => readonly string[]`                                                     | Names every draft member of a rejected claim whose `path` the guard refuses and the advertised schema admits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+@@ -715,6 +714,41 @@ issues at `tests/src/core/lint-tracked.test.ts`.
+ `.gitignore` alone causes this: `tmp` appears there and in no other ignore file this workspace
+ carries. Put every candidate draft you want linted at a path version control tracks.
+ 
++## How the lint stage speaks the protocol
++
++The lint stage owns the workspace, the candidate's identity, and the projection from a diagnostic to
++an `Issue`. `@orkestrel/lsp` owns everything between them, and the hookup is fixed:
++
++- **The transport is `createStdioTransport` from `@orkestrel/lsp/server`.** Its command vector is
++  the current executable, the entry `resolveWorkspaceBinary` resolves for `oxlint` in the target
++  workspace, and `--lsp`; its directory is that workspace. The child is therefore the workspace's
++  own installed Oxlint entry rather than a `node_modules/.bin` shim, for the reason the
++  **Prerequisites** section earlier gives.
++- **The client is `createLSPClient` from `@orkestrel/lsp`,** over that transport, with the
++  workspace's `file://` URL as its `workspace` option and a 2 s `timeout` option. The transport's
++  `grace` option is 1 s, half that deadline, so a child that ignores its ending is signalled and
++  released inside the client's own wait for the close.
++- **Each candidate reaches the server through the `open` method.** The stage supplies the URL the
++  declared path names, the language identifier `inferDocumentLanguage` selects for that path, and
++  the candidate's text, then closes the document. Nothing is written to disk.
++
++Each limit that split produces is the client's decision rather than this package's:
++
++- **The client declares the capabilities and selects the diagnostics path.** It advertises UTF-16
++  positions, document synchronization, published diagnostics, and pulled diagnostics, then reads the
++  server's `initialize` result: a server declaring `diagnosticProvider` is pulled, and every other
++  server is awaited for its published notification. The stage declares nothing and selects nothing,
++  so a change in that selection reaches this stage through the package rather than through a switch
++  here. Measured on 2026-08-26, Oxlint's language server reports version 1.80.0, declares
++  `textDocumentSync` with `openClose`, and declares no `diagnosticProvider`, so its diagnostics
++  arrive on the published path.
++- **A server that declares no `openClose` synchronization admits no candidate at all.** The client
++  refuses the open before any text reaches that server, and the inspection reports the refusal as a
++  stage fault.
++- **A published diagnostic the client refuses reaches no `Issue`.** The client validates every
++  diagnostic in a notification and drops the whole notification when one fails, so that inspection
++  waits out its deadline and reports a stage fault rather than returning a partial answer.
++
+ ## What the runtime overlay serves
+ 
+ The runtime stage does not execute the test the claim declared. It writes that text to a fresh
+@@ -834,10 +868,13 @@ than the probe's — it decides which process reads the stdio, not when the engi
+   stream stopped and would otherwise pause it.
+ - **Stage teardown is bounded, and each stage is bounded by something different.** Every resident
+   stage abandons the inspections it holds rather than waiting behind one, and what it then waits for
+-  differs per stage. The lint stage holds a bound of its own: it waits 2 s for each exchange the
+-  Language Server Protocol leaves to the server — the `initialize` reply that warming waits for and
+-  the `shutdown` reply that ending waits for — then signals the child, so a server
+-  that accepts the connection and answers nothing is released rather than deadlocking `destroy()`.
++  differs per stage. The lint stage holds a bound of its own and sets it on the `@orkestrel/lsp`
++  client it drives: 2 s for each exchange the Language Server Protocol leaves to the server — the
++  `initialize` reply that warming waits for, the diagnostics an inspection waits for, and the
++  `shutdown` reply that ending waits for. The transport's cooperative window is half that, so a
++  server that answers `shutdown` and then ignores `exit` is signalled and released inside the
++  client's own wait for the close, rather than deadlocking `destroy()`. A server that accepts the
++  connection and answers nothing is released the same way.
+   The type stage holds no bound and needs none for its own tools: it disposes each language service
+   directly, and the warm it awaits first is a module load rather than a wait. What it cannot cut
+   short is a language-service call already running, for the reason the preceding **The budget is not
+diff --git a/package-lock.json b/package-lock.json
+index aeccc81..a5f26f4 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -11,6 +11,7 @@
+ 			"dependencies": {
+ 				"@orkestrel/contract": "^0.0.13",
+ 				"@orkestrel/emitter": "^0.0.8",
++				"@orkestrel/lsp": "file:../scaffold/tmp/tarballs/orkestrel-lsp-0.0.1.tgz",
+ 				"@orkestrel/mcp": "^0.0.24",
+ 				"@orkestrel/queue": "^0.0.10",
+ 				"@orkestrel/timeout": "^0.0.8",
+@@ -319,6 +320,20 @@
+ 				"node": ">=22.12.0"
+ 			}
+ 		},
++		"node_modules/@orkestrel/lsp": {
++			"version": "0.0.1",
++			"resolved": "file:../scaffold/tmp/tarballs/orkestrel-lsp-0.0.1.tgz",
++			"integrity": "sha512-oWxfQwshwKvs1AU7z7woVPEnvs6jg7evdtoIrSwaysq4XDVYlz/TF/pqvhjdvOdVxqRjcAcsSjI/IyectgK0bA==",
++			"license": "MIT",
++			"dependencies": {
++				"@orkestrel/contract": "^0.0.13",
++				"@orkestrel/emitter": "^0.0.8",
++				"@orkestrel/process": "^0.0.6"
++			},
++			"engines": {
++				"node": ">=22.12.0"
++			}
++		},
+ 		"node_modules/@orkestrel/markdown": {
+ 			"version": "0.0.11",
+ 			"resolved": "https://registry.npmjs.org/@orkestrel/markdown/-/markdown-0.0.11.tgz",
+diff --git a/package.json b/package.json
+index c0111ea..89661e8 100644
+--- a/package.json
++++ b/package.json
+@@ -94,6 +94,7 @@
+ 	"dependencies": {
+ 		"@orkestrel/contract": "^0.0.13",
+ 		"@orkestrel/emitter": "^0.0.8",
++		"@orkestrel/lsp": "file:../scaffold/tmp/tarballs/orkestrel-lsp-0.0.1.tgz",
+ 		"@orkestrel/mcp": "^0.0.24",
+ 		"@orkestrel/queue": "^0.0.10",
+ 		"@orkestrel/timeout": "^0.0.8",
+diff --git a/src/server/helpers.ts b/src/server/helpers.ts
+index 8de4ade..56b31be 100644
+--- a/src/server/helpers.ts
++++ b/src/server/helpers.ts
+@@ -591,26 +591,6 @@ export function matchesWorkspaceModule(path: string): boolean {
+ 	return /\.(?:[cm]?[jt]sx?|vue|json)$/.test(path)
+ }
+ 
+-/**
+- * Reads a JSON-RPC frame's declared byte length.
+- *
+- * @param header - The frame header text without its terminating empty line
+- * @returns The non-negative content length, or `undefined` for an invalid header
+- *
+- * @example
+- * ```ts
+- * parseContentLength('Content-Length: 128') // 128
+- * parseContentLength('Content-Type: application/json') // undefined
+- * ```
+- */
+-export function parseContentLength(header: string): number | undefined {
+-	const match = /(?:^|\r\n)Content-Length:\s*(\d+)(?:\r\n|$)/i.exec(header)
+-	const text = match?.[1]
+-	if (text === undefined) return undefined
+-	const length = Number.parseInt(text, 10)
+-	return Number.isSafeInteger(length) && length >= 0 ? length : undefined
+-}
+-
+ /**
+  * Normalizes a caught or foreign error into readable text.
+  *
+diff --git a/src/server/stages/LintStage.ts b/src/server/stages/LintStage.ts
+index c21749e..3f4096c 100644
+--- a/src/server/stages/LintStage.ts
++++ b/src/server/stages/LintStage.ts
+@@ -1,17 +1,15 @@
+ import type { Case, Check, Draft, Issue, Stage } from '@src/core'
+ import type { StageInterface } from '../types.js'
+-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+-import type { TimeoutInterface } from '@orkestrel/timeout'
+-import { spawn } from 'node:child_process'
++import type { LSPClientInterface, LSPDiagnostic, LSPExit } from '@orkestrel/lsp'
+ import { pathToFileURL } from 'node:url'
+-import { createTimeout } from '@orkestrel/timeout'
++import { createLSPClient } from '@orkestrel/lsp'
++import { createStdioTransport } from '@orkestrel/lsp/server'
+ import { ProbeError, createDestroyedError } from '@src/core'
+ import {
+ 	describeUnknown,
+ 	guardStage,
+ 	inferDocumentLanguage,
+ 	normalizePath,
+-	parseContentLength,
+ 	resolveWorkspaceBinary,
+ 	resolveWorkspaceFile,
+ } from '../helpers.js'
+@@ -20,13 +18,20 @@ import {
+  * Inspects virtual documents through one resident Oxlint language server.
+  *
+  * @remarks
+- * Construction starts the target workspace's Oxlint binary with its Language Server Protocol
+- * mode. Each inspection opens the supplied text by URI, waits for published diagnostics, and
+- * closes the document without writing it to disk.
++ * Construction starts the target workspace's Oxlint binary with its Language Server Protocol mode
++ * and hands the conversation to `@orkestrel/lsp`: `createStdioTransport` owns the child process and
++ * its bytes, and `createLSPClient` owns the framing, the request correlation, the capabilities this
++ * stage advertises, and the choice between pulled and pushed diagnostics. This stage owns the
++ * workspace, the candidate identity, and the projection from a diagnostic to an `Issue`.
++ *
++ * Each inspection opens the supplied text by URI, waits for the client's diagnostics, and closes the
++ * document without writing it to disk. That wait is bounded, so a server that admits a document and
++ * publishes nothing refuses the inspection rather than holding it for the life of the process.
+  *
+  * Teardown is bounded at both ends. Warming waits for the server's `initialize` response and the
+- * ending waits for its `shutdown` reply, and the protocol leaves both answers to the server, so
+- * `destroy` bounds each exchange and takes the ending back with a signal when the bound passes.
++ * ending waits for its `shutdown` reply, and the protocol leaves both answers to the server, so the
++ * client's deadline bounds each exchange and the transport's cooperative window takes the ending
++ * back with a signal when that window passes.
+  *
+  * The URI is the path the candidate declared, so the candidate receives exactly the rule set the
+  * workspace's own lint gate applies to that path, including an override anchored to one directory,
+@@ -45,19 +50,18 @@ import {
+  */
+ export class LintStage implements StageInterface {
+ 	readonly #workspace: string
+-	// The bound on every exchange teardown has with the language server, warming included. The
+-	// protocol leaves both the warming answer and the ending to the server, so each one is a wait
+-	// this stage takes back rather than a wait it can rely on.
++	// The bound this stage holds over every exchange the protocol leaves to the server: the
++	// `initialize` reply warming waits for, the diagnostics an inspection waits for, and the
++	// `shutdown` reply ending waits for. The transport's cooperative window is half of it, so a
++	// child that ignores its ending is signalled and released inside the same bound rather than
++	// outliving the client's own wait for the close.
+ 	readonly #deadline = 2_000
+-	readonly #warmth: Promise<ChildProcessWithoutNullStreams>
+-	readonly #responses = new Map<number, (value: unknown) => void>()
+-	readonly #failures = new Map<number, (error: Error) => void>()
+-	readonly #documents = new Map<string, string>()
+-	readonly #publishes = new Map<string, (issues: readonly Issue[]) => void>()
+-	readonly #refusals = new Map<string, (error: Error) => void>()
+-	#child: ChildProcessWithoutNullStreams | undefined
+-	#buffer = Buffer.alloc(0)
+-	#sequence = 0
++	readonly #documents = new Set<string>()
++	readonly #warmth: Promise<LSPClientInterface>
++	// Teardown reads the constructed client rather than the warming result, because a warming that
++	// failed or that is still waiting for its answer still leaves a client and a child to release.
++	#client: LSPClientInterface | undefined
++	#ending: string | undefined
+ 	#closing: Promise<void> | undefined
+ 	#progress = 0
+ 	#destroyed = false
+@@ -98,11 +102,11 @@ export class LintStage implements StageInterface {
+ 	async #inspect(subject: Case): Promise<Check> {
+ 		if (this.#destroyed) throw createDestroyedError('lint stage')
+ 		const started = performance.now()
+-		await this.#warmth
++		const client = await this.#warmed()
+ 		if (this.#destroyed) throw createDestroyedError('lint stage')
+ 		const issues: Issue[] = []
+ 		for (const draft of [...subject.files, subject.test]) {
+-			issues.push(...(await this.#document(draft)))
++			issues.push(...(await this.#document(client, draft)))
+ 		}
+ 		return {
+ 			stage: this.stage,
+@@ -111,175 +115,100 @@ export class LintStage implements StageInterface {
+ 		}
+ 	}
+ 
++	// Releases the client, which ends its conversation and its child. The client asks the server to
++	// shut down, bounds that reply, writes the `exit` the protocol leaves to the client to force,
++	// and hands a child that outlives the cooperative window to a signal, so a server that answers
++	// neither its ending nor its signal is released rather than deadlocking this call.
+ 	async #destroy(): Promise<void> {
+-		// A server that failed to warm still leaves a child to release, so read the spawned child
+-		// rather than the warming result.
+-		const child = await this.#warmed()
+-		// Abandon every document in flight rather than waiting for it: a server that never publishes
+-		// its diagnostics would otherwise hold teardown open for the life of the process.
+-		this.#fail(createDestroyedError('lint stage'))
+-		if (child === undefined || this.#ending !== undefined) return
+-		const released = new Promise<void>((resolve) => {
+-			child.once('exit', () => resolve())
+-			child.once('close', () => resolve())
+-		})
+-		await this.#release(child, released)
+-	}
+-
+-	// Reads the warmed language server, or the spawned child when warming failed or outran the
+-	// deadline. Warming waits for the `initialize` response, and the protocol leaves that answer to
+-	// the server: one that accepts the connection and answers nothing has broken no rule, and
+-	// waiting on it holds teardown open for the life of the host. Teardown needs the child rather
+-	// than the warming result, and `#warm` has the child before it sends anything, so the bound
+-	// costs the answer and nothing else. The abandoned warming promise keeps its constructor's
+-	// observer, so nothing rejects into the host.
+-	async #warmed(): Promise<ChildProcessWithoutNullStreams | undefined> {
+-		const timeout = createTimeout({ ms: this.#deadline })
+-		timeout.start()
+-		try {
+-			return await Promise.race([this.#warmth, this.#expiry(timeout)])
+-		} catch {
+-			return this.#child
+-		} finally {
+-			timeout.clear()
+-		}
++		await this.#client?.destroy()
+ 	}
+ 
+-	// Ends the conversation under a deadline and signals the child when that deadline passes. The
+-	// protocol leaves the ending to the server: a server that answers `shutdown` and then ignores
+-	// `exit` has broken no rule, and one that answers neither is unreachable rather than dead. Both
+-	// leave teardown waiting for the life of the host and leak the child with it, so this bounds
+-	// the whole exchange at two seconds and then takes the ending back. `SIGKILL` cannot be
+-	// handled, so the child ends and its own `exit` event settles the wait.
+-	async #release(child: ChildProcessWithoutNullStreams, released: Promise<void>): Promise<void> {
+-		const timeout = createTimeout({ ms: this.#deadline })
+-		timeout.start()
+-		try {
+-			await Promise.race([this.#retire(child).then(() => released), this.#expiry(timeout)])
+-		} catch {
+-			child.kill('SIGKILL')
+-			await released
+-		} finally {
+-			timeout.clear()
+-		}
++	// Builds the conversation and warms it. Everything before the first await runs while the
++	// constructor is still on the stack, so teardown finds the client whatever the warming does
++	// next; a workspace that publishes no Oxlint binary rejects here instead, and leaves none.
++	async #warm(): Promise<LSPClientInterface> {
++		const binary = resolveWorkspaceBinary(this.#workspace, 'oxlint')
++		const client = createLSPClient({
++			transport: createStdioTransport({
++				server: {
++					command: [process.execPath, binary, '--lsp'],
++					directory: this.#workspace,
++				},
++				grace: this.#deadline / 2,
++			}),
++			workspace: pathToFileURL(this.#workspace).href,
++			timeout: this.#deadline,
++		})
++		this.#client = client
++		client.emitter.on('exit', (exit) => this.#retire(exit))
++		await client.start()
++		return client
+ 	}
+ 
+-	// Asks the language server to shut down and signals it when that conversation fails. A server
+-	// that died mid-teardown, or that never answers, still has to release its resources, and
+-	// teardown must not wait on a reply a dead pipe swallowed.
+-	async #retire(child: ChildProcessWithoutNullStreams): Promise<void> {
++	// Reads the warmed client, phrasing a warming failure the way this stage reports one.
++	async #warmed(): Promise<LSPClientInterface> {
+ 		try {
+-			await this.#request('shutdown', undefined)
+-			this.#notify('exit', undefined)
+-		} catch {
+-			child.kill('SIGKILL')
++			return await this.#warmth
++		} catch (error) {
++			throw this.#translate(error)
+ 		}
+ 	}
+ 
+-	// Rejects when the teardown deadline fires, so a race against it settles even when the server
+-	// it waits on answers nothing.
+-	#expiry(timeout: TimeoutInterface): Promise<never> {
+-		return new Promise<never>((_resolve, reject) => {
+-			timeout.signal.addEventListener(
+-				'abort',
+-				() =>
+-					reject(
+-						new ProbeError(`The Oxlint language server did not exit within ${timeout.ms} ms`, {
+-							origin: 'instrument',
+-							code: 'deadline',
+-							context: { stage: this.stage, deadline: timeout.ms },
+-						}),
+-					),
+-				{ once: true },
+-			)
+-		})
+-	}
+-
+-	async #warm(): Promise<ChildProcessWithoutNullStreams> {
+-		const binary = resolveWorkspaceBinary(this.#workspace, 'oxlint')
+-		const child = spawn(process.execPath, [binary, '--lsp'], {
+-			cwd: this.#workspace,
+-			stdio: 'pipe',
+-		})
+-		this.#child = child
+-		child.stderr.resume()
+-		child.stdout.on('data', (chunk: Buffer) => this.#read(chunk))
+-		// A write racing the server's death reports `EPIPE` on this stream rather than throwing, and
+-		// an unobserved stream error ends the resident host. Report it as a stage fault so the
+-		// inspection that raced the death is refused rather than left waiting for a reply the pipe
+-		// swallowed.
+-		child.stdin.on('error', (error) => this.#fail(error))
+-		child.on('error', (error) => this.#fail(error))
+-		child.on('exit', (code, signal) => this.#exit(code, signal))
+-		await this.#request('initialize', {
+-			processId: process.pid,
+-			rootUri: pathToFileURL(this.#workspace).href,
+-			capabilities: {},
+-			workspaceFolders: [
+-				{
+-					uri: pathToFileURL(this.#workspace).href,
+-					name: 'workspace',
+-				},
+-			],
+-		})
+-		this.#notify('initialized', {})
+-		return child
++	// Names one ending for a message. The host announces an exit with exactly one non-null member,
++	// and the client reports the signalled death and the code exit through the same event, so a
++	// later inspection can say which one the server took.
++	#retire(exit: LSPExit): void {
++		this.#ending = exit.signal === null ? `code ${exit.code}` : `signal ${exit.signal}`
+ 	}
+ 
+ 	// Opens one candidate at the path it was declared. Oxlint keys its overrides on globs, so any
+ 	// identity distinct from that path selects a different rule set from the one the workspace's own
+ 	// gate applies, and an override naming one exact file is reachable by nothing else. One URI
+-	// carries one open document and one publication, so a caller driving two inspections of one path
+-	// at once is refused rather than served an answer belonging to the other.
+-	#document(draft: Draft): Promise<readonly Issue[]> {
++	// carries one open document, so a caller driving two inspections of one path at once is refused
++	// rather than served an answer belonging to the other. The document is closed whatever the
++	// inspection returned, so the same path is inspectable again.
++	async #document(client: LSPClientInterface, draft: Draft): Promise<readonly Issue[]> {
+ 		const uri = pathToFileURL(resolveWorkspaceFile(this.#workspace, draft.path)).href
+-		if (this.#publishes.has(uri)) {
+-			return Promise.reject(
+-				new ProbeError(`The lint stage is already inspecting ${draft.path}`, {
+-					origin: 'claimant',
+-					code: 'refused',
+-					context: { stage: this.stage, path: draft.path },
+-				}),
+-			)
++		if (this.#documents.has(uri)) {
++			throw new ProbeError(`The lint stage is already inspecting ${draft.path}`, {
++				origin: 'claimant',
++				code: 'refused',
++				context: { stage: this.stage, path: draft.path },
++			})
+ 		}
+-		const diagnostics = new Promise<readonly Issue[]>((resolve, reject) => {
+-			this.#documents.set(uri, normalizePath(draft.path))
+-			this.#publishes.set(uri, resolve)
+-			this.#refusals.set(uri, reject)
+-		})
+-		// Attach the cleanup before opening the document. An open that throws would otherwise leave
+-		// this promise pending with no handler, and the next failure rejects it into the host.
+-		const inspected = diagnostics.finally(() => this.#close(uri))
++		this.#documents.add(uri)
++		// Raise the gauge as the document is admitted rather than when its answer arrives, so a
++		// coordinator comparing its snapshot reads claimant-owned work in flight.
++		this.#progress += 1
+ 		try {
+-			this.#notify('textDocument/didOpen', {
+-				textDocument: {
+-					uri,
+-					languageId: inferDocumentLanguage(draft.path),
+-					version: this.#sequence,
+-					text: draft.text,
+-				},
++			const diagnostics = await client.open({
++				uri,
++				languageId: inferDocumentLanguage(draft.path),
++				version: this.#progress,
++				text: draft.text,
+ 			})
+-			this.#progress += 1
++			return this.#issues(normalizePath(draft.path), diagnostics)
+ 		} catch (error) {
+-			this.#refusals.get(uri)?.(this.#fault(describeUnknown(error), error, draft.path))
++			throw this.#translate(error, draft.path)
++		} finally {
++			this.#documents.delete(uri)
++			// A server that ended, and a client that is closing, can no longer be told the document
++			// closed. Neither failure may replace the diagnosis the caller is receiving.
++			await client.close(uri).catch(() => undefined)
+ 		}
+-		return inspected
+-	}
+-
+-	// How the language server ended, or `undefined` while it runs. Node records a signal death on
+-	// `signalCode`, an exit on `exitCode`, and a child that never spawned on `exitCode` too, and it
+-	// sets each one before the event that announces it. Reading the child covers every ending,
+-	// including the spawn failure, which reports `error` and `close` and never `exit`.
+-	get #ending(): string | undefined {
+-		const child = this.#child
+-		if (child === undefined) return undefined
+-		if (child.exitCode === null && child.signalCode === null) return undefined
+-		return this.#describe(child.exitCode, child.signalCode)
+ 	}
+ 
+-	// Names one ending for a message. Node announces an exit with exactly one non-null argument.
+-	#describe(code: number | null, signal: NodeJS.Signals | null): string {
+-		return signal === null ? `code ${code}` : `signal ${signal}`
++	// Phrases one failure the way this stage reports one. A destroyed stage refuses on its own
++	// terms, a server that ended is named by the ending it took, and everything else is the
++	// client's own coded failure, which `guardStage` carries to the caller as this stage's fault.
++	#translate(error: unknown, path?: string): Error {
++		if (this.#destroyed) return createDestroyedError('lint stage')
++		const ending = this.#ending
++		if (ending !== undefined) {
++			return this.#fault(`The Oxlint language server exited with ${ending}`, error, path)
++		}
++		if (error instanceof Error) return error
++		return this.#fault(describeUnknown(error), error, path)
+ 	}
+ 
+ 	// Every fault this stage reports about its own language server, under one category and naming
+@@ -294,170 +223,15 @@ export class LintStage implements StageInterface {
+ 		})
+ 	}
+ 
+-	// Whether the language server can still receive a message. A server that ended, and one that
+-	// closed its input while its process lives, both take no further writes.
+-	get #reachable(): boolean {
+-		return this.#ending === undefined && this.#child?.stdin.writable === true
+-	}
+-
+-	// Releases one document. The deletes run before the notification because an unreachable server
+-	// refuses the write, and a throw here would replace the diagnosis the caller is receiving and
+-	// leave this document registered for the life of the stage.
+-	#close(uri: string): void {
+-		this.#documents.delete(uri)
+-		this.#publishes.delete(uri)
+-		this.#refusals.delete(uri)
+-		if (this.#destroyed || !this.#reachable) return
+-		this.#notify('textDocument/didClose', { textDocument: { uri } })
+-	}
+-
+-	#request(method: string, params: unknown): Promise<unknown> {
+-		this.#sequence += 1
+-		const id = this.#sequence
+-		const response = new Promise<unknown>((resolve, reject) => {
+-			this.#responses.set(id, resolve)
+-			this.#failures.set(id, reject)
+-		})
+-		try {
+-			this.#send({ jsonrpc: '2.0', id, method, params })
+-		} catch (error) {
+-			// Forget the request before refusing it. A request the stage never sent has no reply to
+-			// wait for, and leaving its entry behind holds this promise for the life of the stage.
+-			const reject = this.#failures.get(id)
+-			this.#responses.delete(id)
+-			this.#failures.delete(id)
+-			reject?.(this.#fault(describeUnknown(error), error))
+-		}
+-		return response
+-	}
+-
+-	#notify(method: string, params: unknown): void {
+-		this.#sequence += 1
+-		this.#send({ jsonrpc: '2.0', method, params })
+-	}
+-
+-	#send(message: unknown): void {
+-		const child = this.#child
+-		if (this.#ending !== undefined) {
+-			throw this.#fault(`The Oxlint language server exited with ${this.#ending}`)
+-		}
+-		if (child === undefined) throw this.#fault('The Oxlint language server is not running')
+-		// A server that closed its input is unreachable while its process still lives, so a write
+-		// here would neither fail nor ever be answered.
+-		if (!child.stdin.writable) throw this.#fault('The Oxlint language server closed its input')
+-		const content = JSON.stringify(message)
+-		const header = `Content-Length: ${Buffer.byteLength(content)}\r\n\r\n`
+-		child.stdin.write(header + content)
+-	}
+-
+-	#read(chunk: Buffer): void {
+-		this.#buffer = Buffer.concat([this.#buffer, chunk])
+-		while (this.#frame()) {}
+-	}
+-
+-	#frame(): boolean {
+-		const boundary = this.#buffer.indexOf('\r\n\r\n')
+-		if (boundary < 0) return false
+-		const header = this.#buffer.subarray(0, boundary).toString('ascii')
+-		const length = parseContentLength(header)
+-		if (length === undefined) {
+-			this.#fail(this.#fault('Oxlint sent an invalid JSON-RPC frame header'))
+-			return false
+-		}
+-		const start = boundary + 4
+-		const end = start + length
+-		if (this.#buffer.length < end) return false
+-		const content = this.#buffer.subarray(start, end).toString('utf8')
+-		this.#buffer = this.#buffer.subarray(end)
+-		try {
+-			const message: unknown = JSON.parse(content)
+-			this.#receive(message)
+-		} catch (error) {
+-			this.#fail(this.#fault(`Oxlint sent invalid JSON: ${describeUnknown(error)}`, error))
+-		}
+-		return true
+-	}
+-
+-	#receive(message: unknown): void {
+-		if (typeof message !== 'object' || message === null) return
+-		if ('id' in message && typeof message.id === 'number') {
+-			const id = message.id
+-			const resolve = this.#responses.get(id)
+-			const reject = this.#failures.get(id)
+-			this.#responses.delete(id)
+-			this.#failures.delete(id)
+-			if ('error' in message && message.error !== undefined) {
+-				reject?.(this.#fault(describeUnknown(message.error)))
+-			} else {
+-				resolve?.('result' in message ? message.result : undefined)
+-			}
+-			return
+-		}
+-		if (!('method' in message) || message.method !== 'textDocument/publishDiagnostics') return
+-		if (!('params' in message) || typeof message.params !== 'object' || message.params === null) {
+-			return
+-		}
+-		const params = message.params
+-		if (!('uri' in params) || typeof params.uri !== 'string') return
+-		if (!('diagnostics' in params) || !Array.isArray(params.diagnostics)) return
+-		const publish = this.#publishes.get(params.uri)
+-		if (publish === undefined) return
+-		publish(this.#issues(params.uri, params.diagnostics))
+-	}
+-
+ 	// Every issue here is one diagnostic Oxlint published about the text the caller supplied, so
+ 	// each one is that code failing. A server this stage cannot drive rejects the inspection
+ 	// instead, so no fault of its own reaches a caller as an issue.
+-	#issues(uri: string, diagnostics: readonly unknown[]): readonly Issue[] {
+-		const path = this.#documents.get(uri)
+-		if (path === undefined) return []
+-		const issues: Issue[] = []
+-		for (const diagnostic of diagnostics) {
+-			if (typeof diagnostic !== 'object' || diagnostic === null) continue
+-			if (!('message' in diagnostic) || typeof diagnostic.message !== 'string') continue
+-			if (
+-				!('range' in diagnostic) ||
+-				typeof diagnostic.range !== 'object' ||
+-				diagnostic.range === null
+-			) {
+-				issues.push({ origin: 'claimant', path, message: diagnostic.message })
+-				continue
+-			}
+-			const range = diagnostic.range
+-			if (!('start' in range) || typeof range.start !== 'object' || range.start === null) {
+-				issues.push({ origin: 'claimant', path, message: diagnostic.message })
+-				continue
+-			}
+-			const start = range.start
+-			if (!('line' in start) || typeof start.line !== 'number') {
+-				issues.push({ origin: 'claimant', path, message: diagnostic.message })
+-				continue
+-			}
+-			issues.push({
+-				origin: 'claimant',
+-				path,
+-				message: diagnostic.message,
+-				line: start.line + 1,
+-			})
+-		}
+-		return issues
+-	}
+-
+-	#fail(error: Error): void {
+-		for (const reject of this.#failures.values()) reject(error)
+-		for (const reject of this.#refusals.values()) reject(error)
+-		this.#responses.clear()
+-		this.#failures.clear()
+-		this.#publishes.clear()
+-		this.#refusals.clear()
+-	}
+-
+-	// Settles everything the ended server can no longer answer. A teardown in flight is registered
+-	// here too: its own `shutdown` request is the last thing outstanding, and a server that exits
+-	// without replying leaves teardown waiting on it unless this refuses it.
+-	#exit(code: number | null, signal: NodeJS.Signals | null): void {
+-		this.#fail(
+-			this.#fault(`The Oxlint language server exited with ${this.#describe(code, signal)}`),
+-		)
++	#issues(path: string, diagnostics: readonly LSPDiagnostic[]): readonly Issue[] {
++		return diagnostics.map((diagnostic): Issue => ({
++			origin: 'claimant',
++			path,
++			message: diagnostic.message,
++			line: diagnostic.range.start.line + 1,
++		}))
+ 	}
+ }
+diff --git a/tests/src/server/helpers.test.ts b/tests/src/server/helpers.test.ts
+index 99f5901..fd1d4b0 100644
+--- a/tests/src/server/helpers.test.ts
++++ b/tests/src/server/helpers.test.ts
+@@ -22,7 +22,6 @@ import {
+ 	normalizePath,
+ 	normalizeValue,
+ 	overwriteFile,
+-	parseContentLength,
+ 	readWorkspaceManifest,
+ 	relativeWorkspaceFile,
+ 	relativeWorkspaceMessage,
+@@ -107,8 +106,6 @@ describe('server helper examples', () => {
+ 		).toBe('tmp/probe/greeting.test.probe-4821-9f0c.ts')
+ 		expect(matchesWorkspaceModule('src/core/greeting.ts')).toBe(true)
+ 		expect(matchesWorkspaceModule('src/styles/tokens.css')).toBe(false)
+-		expect(parseContentLength('Content-Length: 128')).toBe(128)
+-		expect(parseContentLength('Content-Type: application/json')).toBeUndefined()
+ 		expect(describeUnknown(new Error('The lint stage has been destroyed'))).toBe(
+ 			'The lint stage has been destroyed',
+ 		)
+@@ -622,15 +619,7 @@ describe('server path helpers', () => {
+ 	})
+ })
+ 
+-describe('server wire helpers', () => {
+-	it('parses valid content lengths and refuses missing, malformed, and unsafe values', () => {
+-		expect(parseContentLength('Content-Type: application/json\r\nContent-Length: 12')).toBe(12)
+-		expect(parseContentLength('content-length: 0')).toBe(0)
+-		expect(parseContentLength('Content-Type: application/json')).toBeUndefined()
+-		expect(parseContentLength('Content-Length: -1')).toBeUndefined()
+-		expect(parseContentLength('Content-Length: 9007199254740992')).toBeUndefined()
+-	})
+-
++describe('server text helpers', () => {
+ 	it('matches each workspace module family and refuses unrelated files', () => {
+ 		for (const path of [
+ 			'value.ts',
+diff --git a/tests/src/server/stages/LintStage.test.ts b/tests/src/server/stages/LintStage.test.ts
+index 69c610a..5e39d56 100644
+--- a/tests/src/server/stages/LintStage.test.ts
++++ b/tests/src/server/stages/LintStage.test.ts
+@@ -19,8 +19,12 @@ const ROOT = fileURLToPath(WORKSPACE_ROOT)
+ const STAGE = resolve(ROOT, 'src/server/stages/LintStage.ts')
+ 
+ // A protocol-faithful Oxlint language server. It announces its own process id, so a test can kill
+-// the real child the stage owns privately and can read whether that child is still alive. Marker
+-// files select how it ends: `frail` exits with a code on the first document,
++// the real child the stage owns privately and can read whether that child is still alive. Its
++// `initialize` result declares `textDocumentSync` with `openClose`, which is what a client checks
++// before it opens a document at all — real Oxlint declares the same capability, so a fixture that
++// omitted it would refuse every document the real server admits.
++//
++// Marker files select how it ends: `frail` exits with a code on the first document,
+ // `unanswered-shutdown` exits without replying to `shutdown`, `unanswered-initialize` exits
+ // without replying to `initialize`, `silent-initialize` stays alive and never replies to
+ // `initialize`, and `ignored-exit` answers `shutdown` and then stays alive through `exit`, which is
+@@ -57,7 +61,8 @@ const SERVER = [
+ 	'\t\t\t\treturn',
+ 	'\t\t\t}',
+ 	"\t\t\tif (existsSync('silent-initialize')) return",
+-	"\t\t\tsend({ jsonrpc: '2.0', id: message.id, result: { capabilities: {} } })",
++	'\t\t\tconst sync = { openClose: true, change: 1 }',
++	"\t\t\tsend({ jsonrpc: '2.0', id: message.id, result: { capabilities: { textDocumentSync: sync } } })",
+ 	'\t\t}',
+ 	"\t\tif (message.method === 'textDocument/didOpen') {",
+ 	"\t\t\tif (existsSync('frail')) process.exit(7)",
+@@ -103,9 +108,11 @@ const HOST = [
+ 	// own resolver and the published build each do for it: the extension the source writes, and the
+ 	// core entry the server bundle externalizes `@src/core` to.
+ 	"const root = new URL('../../../', pathToFileURL(stage))",
++	"const owned = new URL('src/', root).href",
+ 	'registerHooks({',
+ 	'\tresolve(specifier, context, next) {',
+-	"\t\tif (specifier.startsWith('.') && specifier.endsWith('.js')) {",
++	'\t\tconst inside = context.parentURL !== undefined && context.parentURL.startsWith(owned)',
++	"\t\tif (inside && specifier.startsWith('.') && specifier.endsWith('.js')) {",
+ 	"\t\t\treturn next(specifier.slice(0, -3) + '.ts', context)",
+ 	'\t\t}',
+ 	"\t\tif (specifier === '@src/core') {",
+@@ -621,6 +628,37 @@ describe('lint stage', () => {
+ 		},
+ 	)
+ 
++	it(
++		'ends the language server process it owns when teardown settles',
++		{ timeout: 20_000 },
++		async (context) => {
++			const scratch = createScratch({ files: FIXTURE })
++			try {
++				const stage = new LintStage(scratch.path)
++				await stage.inspect({
++					files: [],
++					test: { path: 'tests/src/server/lint-owned-process.test.ts', text: PASSING },
++				})
++				// The stage keeps its child private, so the fixture announces the process id the
++				// stage actually spawned and this row reads the real child rather than a handle
++				// the stage handed out.
++				const owned = readFixtureServer(scratch)
++				await context.annotate(`the lint stage owns language server process ${owned}`)
++				// The control comes first: signal zero reaches that process while the stage still
++				// holds it, so a refusal afterwards is evidence about the teardown rather than
++				// about a process id nothing could ever reach.
++				expect(isProcessLive(owned)).toBe(true)
++				await expect(stage.destroy()).resolves.toBeUndefined()
++				// Signal zero is refused for a process the host has reaped, which is what separates
++				// a released child from an orphan the stage abandoned to the host's lifetime.
++				expect(isProcessLive(owned)).toBe(false)
++				await expectReleased(stage)
++			} finally {
++				scratch.destroy()
++			}
++		},
++	)
++
+ 	it('settles teardown after the language server dies by signal', { timeout: 20_000 }, async () => {
+ 		const scratch = createScratch({ files: FIXTURE })
+ 		try {
+@@ -765,7 +803,14 @@ describe('lint stage', () => {
+ 				const asked = performance.now()
+ 				await expect(stage.destroy()).resolves.toBeUndefined()
+ 				expect(performance.now() - asked).toBeLessThan(5_000)
+-				await expect(inspection).rejects.toThrow('The Oxlint language server exited with code 0')
++				// Teardown settles the outstanding `initialize` itself rather than leaving it for
++				// the ending the server takes a moment later, so the inspection parked on warming
++				// is refused on the stage's own terms.
++				await expect(inspection).rejects.toThrow('The lint stage has been destroyed')
++				// The gauge is what separates that refusal from one raised at the entry guard: this
++				// inspection was admitted before teardown and never reached a document, so nothing
++				// but the interrupted warming can have settled it.
++				expect(stage.progress).toBe(0)
+ 				await expectReleased(stage)
+ 			} finally {
+ 				scratch.destroy()
+@@ -934,12 +979,24 @@ describe('lint stage', () => {
+ 					},
+ 				})
+ 				await waitForDelay(250)
++				// The client owns the write, so the refusal reaches the caller as the notification
++				// that could not be delivered rather than as the host's own pipe code. What the row
++				// proves is unchanged: the inspection is refused as a stage fault instead of
++				// waiting for a reply a dead input can never carry.
+ 				await expect(
+ 					stage.inspect({
+ 						files: [],
+ 						test: { path: 'tests/src/server/lint-refused.test.ts', text: PASSING },
+ 					}),
+-				).rejects.toThrow('EPIPE')
++				).rejects.toMatchObject({
++					name: 'ProbeError',
++					origin: 'instrument',
++					code: 'malformed',
++					context: { stage: 'lint' },
++					message: expect.stringContaining(
++						"The LSP notification 'textDocument/didOpen' could not be written",
++					),
++				})
+ 				await expect(stage.destroy()).resolves.toBeUndefined()
+ 			} finally {
+ 				const teardown = createTeardown()

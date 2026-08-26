@@ -1,0 +1,156 @@
+[
+  {
+    "name": "M1a-empty-command-code",
+    "claim": "start rejects an empty command with code spawn",
+    "exit": 1,
+    "counts": "1 failed | 13 passed (14)",
+    "failing": [
+      "rejects an empty command as a spawn failure"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M1b-spawn-fault-code",
+    "claim": "start rejects a host spawn fault with code spawn",
+    "exit": 1,
+    "counts": "1 failed | 13 passed (14)",
+    "failing": [
+      "rejects an executable the host cannot launch as a spawn failure"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M2-live-always-false",
+    "claim": "start refuses a second call while the child is live",
+    "exit": 1,
+    "counts": "1 failed | 13 passed (14)",
+    "failing": [
+      "refuses a second start while its child is live"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M9-live-always-true",
+    "claim": "start spawns a fresh child after close and after an unprompted exit",
+    "exit": 1,
+    "counts": "13 failed | 1 passed (14)",
+    "failing": [
+      "produces a transport that spawns, carries bytes, and ends its child",
+      "reads a real Oxlint diagnostic through the client and leaves no child behind",
+      "rejects an empty command as a spawn failure",
+      "rejects an executable the host cannot launch as a spawn failure",
+      "refuses a second start while its child is live",
+      "delivers a frame split across host reads without joining the chunks",
+      "delivers coalesced frames as the single chunk the host read",
+      "carries the configured directory and environment into the child",
+      "resolves send as false before the first start and after close resolves",
+      "ends a cooperative child and surfaces its real exit",
+      "kills a child that outlives its grace window and leaves no process behind",
+      "emits the exit a child reports when it ends unprompted",
+      "starts a fresh child after close resolves and after an unprompted exit"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M3a-join-chunks",
+    "claim": "a frame split across host reads arrives unjoined",
+    "exit": 1,
+    "counts": "2 failed | 12 passed (14)",
+    "failing": [
+      "reads a real Oxlint diagnostic through the client and leaves no child behind",
+      "delivers a frame split across host reads without joining the chunks"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M3b-split-chunks",
+    "claim": "coalesced frames arrive as the single chunk the host read",
+    "exit": 1,
+    "counts": "3 failed | 11 passed (14)",
+    "failing": [
+      "delivers a frame split across host reads without joining the chunks",
+      "delivers coalesced frames as the single chunk the host read",
+      "carries the configured directory and environment into the child"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M4-no-cooperative-end",
+    "claim": "close ends the child cooperatively and surfaces its own exit",
+    "exit": 1,
+    "counts": "7 failed | 7 passed (14)",
+    "failing": [
+      "produces a transport that spawns, carries bytes, and ends its child",
+      "refuses a second start while its child is live",
+      "delivers a frame split across host reads without joining the chunks",
+      "delivers coalesced frames as the single chunk the host read",
+      "carries the configured directory and environment into the child",
+      "resolves send as false before the first start and after close resolves",
+      "ends a cooperative child and surfaces its real exit"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M5-no-escalation",
+    "claim": "close kills a child that outlives its grace window",
+    "exit": 1,
+    "counts": "1 failed | 13 passed (14)",
+    "failing": [
+      "kills a child that outlives its grace window and leaves no process behind"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M6-no-exit-event",
+    "claim": "the transport emits the exit the host reported",
+    "exit": 1,
+    "counts": "5 failed | 9 passed (14)",
+    "failing": [
+      "produces a transport that spawns, carries bytes, and ends its child",
+      "ends a cooperative child and surfaces its real exit",
+      "kills a child that outlives its grace window and leaves no process behind",
+      "emits the exit a child reports when it ends unprompted",
+      "starts a fresh child after close resolves and after an unprompted exit"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M7-no-send-guard",
+    "claim": "send resolves false before the first start and after close resolves",
+    "exit": 1,
+    "counts": "2 failed | 12 passed (14)",
+    "failing": [
+      "rejects an executable the host cannot launch as a spawn failure",
+      "resolves send as false before the first start and after close resolves"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M8-no-directory",
+    "claim": "the configured directory reaches the child",
+    "exit": 1,
+    "counts": "1 failed | 13 passed (14)",
+    "failing": [
+      "carries the configured directory and environment into the child"
+    ],
+    "cmp": "identical"
+  },
+  {
+    "name": "M10-send-writes-nothing",
+    "claim": "the Oxlint receipt round-trips real bytes through the child",
+    "exit": 1,
+    "counts": "9 failed | 5 passed (14)",
+    "failing": [
+      "produces a transport that spawns, carries bytes, and ends its child",
+      "reads a real Oxlint diagnostic through the client and leaves no child behind",
+      "delivers a frame split across host reads without joining the chunks",
+      "delivers coalesced frames as the single chunk the host read",
+      "carries the configured directory and environment into the child",
+      "ends a cooperative child and surfaces its real exit",
+      "kills a child that outlives its grace window and leaves no process behind",
+      "emits the exit a child reports when it ends unprompted",
+      "starts a fresh child after close resolves and after an unprompted exit"
+    ],
+    "cmp": "identical"
+  }
+]

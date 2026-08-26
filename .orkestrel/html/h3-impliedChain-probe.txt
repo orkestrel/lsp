@@ -1,0 +1,2 @@
+DEEP   : "<table><tr><td><p><button>x<td>y</td></button></p></td></tr></table>"
+CONTROL: "<table><tr><td><p>x</p></td><td>y</td></tr></table>"

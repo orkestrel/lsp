@@ -16,9 +16,10 @@ development dependency that the conformance suite reads, never a runtime import.
 
 The plan of record is sequenced. Each chunk reaches green — the full gate chain plus an
 independent audit round — before the next begins. The campaign's briefs, reports, audit
-verdicts, and acceptance records live in the orchestrating repository under
-`.orkestrel/campaign/`, one file pair per unit, and name each chunk here by its
-commits.
+verdicts, and acceptance records live in this repository under `.orkestrel/`, one
+folder per fleet package with the cross-package record under `.orkestrel/campaign/`,
+and name each chunk here by its commits. The `state.md` file there is the
+session-boundary snapshot of what is in flight.
 
 ## Delivered
 

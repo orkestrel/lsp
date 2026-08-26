@@ -1,0 +1,891 @@
+diff --git a/guides/markdown.md b/guides/markdown.md
+index a116635..8727a89 100644
+--- a/guides/markdown.md
++++ b/guides/markdown.md
+@@ -54,11 +54,11 @@ From [`constants.ts`](../src/core/constants.ts).
+ 
+ The block/inline parsing pipeline, from [`parsers.ts`](../src/core/parsers.ts) — the orchestration `parseDocument` composes out of `helpers.ts`'s pure scanning leaves (AGENTS §5). `parseBlocks` is the recursive spine; each parser is exported and independently testable. The construct scanners it composes (`collectTable` / `collectList`) are leaves and live in [`helpers.ts`](../src/core/helpers.ts) with the other scanners; each calls back into the phase entry above it, so the two files are mutually recursive by design.
+ 
+-| Parser          | Kind     | Signature                                                           | Behavior                                                                                                                                         |
+-| --------------- | -------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+-| `parseBlocks`   | function | `(lines: readonly string[], depth: number) => readonly BlockNode[]` | Parses a run of markdown lines into block nodes, recursing into nested blockquotes/list items; degrades to one literal paragraph at `MAX_DEPTH`. |
+-| `parseDocument` | function | `(markdown: string) => MarkdownDocument`                            | Parses a markdown string into a `MarkdownDocument` AST via the block phase (`splitLines` + `parseBlocks`). Never throws.                         |
+-| `parseInline`   | function | `(text: string) => readonly InlineNode[]`                           | Parses one line of inline content (emphasis / code / links / images / breaks), no block structure. Never throws.                                 |
++| Parser          | Kind     | Signature                                                                   | Behavior                                                                                                                                                        |
++| --------------- | -------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
++| `parseBlocks`   | function | `(lines: readonly MarkdownSource[], depth: number) => readonly BlockNode[]` | Parses a run of offset-bearing markdown lines into block nodes, recursing into nested blockquotes/list items; degrades to one literal paragraph at `MAX_DEPTH`. |
++| `parseDocument` | function | `(markdown: string) => MarkdownDocument`                                    | Parses a markdown string into a `MarkdownDocument` AST via the block phase (`splitLines` + `parseBlocks`). Never throws.                                        |
++| `parseInline`   | function | `(text: string) => readonly InlineNode[]`                                   | Parses one line of inline content (emphasis / code / links / images / breaks), no block structure. Never throws.                                                |
+ 
+ ### Helpers
+ 
+@@ -66,12 +66,12 @@ Pure, total leaves from [`helpers.ts`](../src/core/helpers.ts) — the scanning
+ 
+ | Helper                  | Kind     | Signature                                                                                            | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+ | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+-| `splitLines`            | function | `(markdown: string) => readonly string[]`                                                            | Normalizes `\r\n` / `\r` to `\n` and splits into lines; a single trailing newline yields no final empty line.                                                                                                                                                                                                                                                                                                                                  |
++| `splitLines`            | function | `(markdown: string) => readonly MarkdownSource[]`                                                    | Walks the original string into offset-bearing lines while normalizing `\r\n` / `\r` at line boundaries; a single trailing terminator yields no final empty line.                                                                                                                                                                                                                                                                               |
+ | `countIndent`           | function | `(line: string) => number`                                                                           | Count of leading space/tab characters (a tab counts as one).                                                                                                                                                                                                                                                                                                                                                                                   |
+-| `extractHeading`        | function | `(line: string) => { level: number, text: string } \| undefined`                                     | Parses an ATX heading line (`#`…`######`); `undefined` when not a heading.                                                                                                                                                                                                                                                                                                                                                                     |
++| `extractHeading`        | function | `(line: string) => { level: number, text: string, offset: number } \| undefined`                     | Parses an ATX heading line (`#`…`######`) and locates its trimmed text inside the line; `undefined` when not a heading.                                                                                                                                                                                                                                                                                                                        |
+ | `extractFence`          | function | `(line: string) => { marker: string, lang: string \| undefined } \| undefined`                       | Parses a fenced-code opening line (` ``` ` / `~~~`, optional info string); `undefined` when not a fence opener.                                                                                                                                                                                                                                                                                                                                |
+ | `extractListItem`       | function | `(line: string) => ListItemMatch \| undefined`                                                       | Parses a bullet (`-`/`*`/`+`) or ordinal (`1.`/`1)`) list-item line; `undefined` when not a list item.                                                                                                                                                                                                                                                                                                                                         |
+-| `stripQuote`            | function | `(line: string) => string`                                                                           | Strips one level of `>` blockquote marker (plus one optional space).                                                                                                                                                                                                                                                                                                                                                                           |
++| `stripQuote`            | function | `(source: MarkdownSource) => MarkdownSource`                                                         | Strips one level of `>` blockquote marker (plus one optional space) while preserving original coordinates.                                                                                                                                                                                                                                                                                                                                     |
+ | `splitTableRow`         | function | `(row: string) => readonly string[]`                                                                 | Splits a GFM table row into cells; outer pipes optional, `\|` escaped inside a cell is literal.                                                                                                                                                                                                                                                                                                                                                |
+ | `delimiterToAlignments` | function | `(delimiter: string) => readonly (TableAlign \| null)[]`                                             | Derives per-column alignment from a GFM delimiter row; a bare `---` column yields `null`.                                                                                                                                                                                                                                                                                                                                                      |
+ | `startsBlock`           | function | `(lines: readonly string[], index: number) => boolean`                                               | Whether the line at `index` starts a NEW block kind — stops paragraph collection without a blank-line separator.                                                                                                                                                                                                                                                                                                                               |
+diff --git a/src/core/helpers.ts b/src/core/helpers.ts
+index 3a2ce6c..e11110c 100644
+--- a/src/core/helpers.ts
++++ b/src/core/helpers.ts
+@@ -20,6 +20,9 @@ import type {
+ 	MarkdownNode,
+ 	MarkdownProjection,
+ 	MarkdownRewriteHandler,
++	MarkdownSegment,
++	MarkdownSource,
++	MarkdownSpan,
+ 	TableAlign,
+ 	TableNode,
+ } from './types.js'
+@@ -68,25 +71,180 @@ import {
+ //  Text + line utilities
+ 
+ /**
+- * Normalize line endings to `\n` and split a markdown document into its lines - CRLF
+- * (`\r\n`) and bare CR (`\r`) both collapse to `\n` first, so a Windows-origin
+- * document parses identically. A single trailing newline does not yield a final
+- * empty line.
++ * Splits a markdown document into offset-bearing lines while normalizing CRLF and
++ * bare CR terminators at the line boundary. A single trailing terminator does not
++ * yield a final empty line.
+  *
+  * @param markdown - The raw markdown source
+- * @returns The document's lines, line-terminators stripped
++ * @returns The document's lines with their original-string coordinates
+  *
+  * @example
+  * ```ts
+- * splitLines('a\r\nb\nc') // ['a', 'b', 'c']
++ * splitLines('a\r\nb') // [{ text: 'a', segments: [{ offset: 0, start: 0, end: 1 }] }, ...]
+  * ```
+  */
+-export function splitLines(markdown: string): readonly string[] {
+-	const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
+-	if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
++export function splitLines(markdown: string): readonly MarkdownSource[] {
++	const lines: MarkdownSource[] = []
++	let start = 0
++	let index = 0
++	while (index < markdown.length) {
++		const character = markdown[index]
++		if (character !== '\r' && character !== '\n') {
++			index += 1
++			continue
++		}
++		lines.push({
++			text: markdown.slice(start, index),
++			segments: [{ offset: 0, start, end: index }],
++		})
++		index += character === '\r' && markdown[index + 1] === '\n' ? 2 : 1
++		start = index
++	}
++	lines.push({
++		text: markdown.slice(start),
++		segments: [{ offset: 0, start, end: markdown.length }],
++	})
++	if (lines.length > 1 && lines[lines.length - 1]?.text === '') lines.pop()
+ 	return lines
+ }
+ 
++/**
++ * Slices derived markdown text and narrows each intersecting source segment to the
++ * same text-relative range.
++ *
++ * @param source - The offset-bearing source to slice
++ * @param from - The inclusive text offset
++ * @param to - The exclusive text offset
++ * @returns The sliced text and its narrowed original-string segments
++ *
++ * @example
++ * ```ts
++ * sliceSource({ text: 'abc', segments: [{ offset: 0, start: 4, end: 7 }] }, 1, 3)
++ * // { text: 'bc', segments: [{ offset: 0, start: 5, end: 7 }] }
++ * ```
++ */
++export function sliceSource(source: MarkdownSource, from: number, to: number): MarkdownSource {
++	const start = Math.max(0, Math.min(from, source.text.length))
++	const end = Math.max(start, Math.min(to, source.text.length))
++	const segments: MarkdownSegment[] = []
++	for (let index = 0; index < source.segments.length; index += 1) {
++		const segment = source.segments[index]
++		if (segment === undefined) continue
++		const next = source.segments[index + 1]
++		const limit = Math.min(
++			segment.offset + (segment.end - segment.start),
++			next === undefined ? source.text.length : next.offset,
++		)
++		const overlapStart = Math.max(start, segment.offset)
++		const overlapEnd = Math.min(end, limit)
++		const empty = segment.offset === limit && overlapStart === segment.offset
++		if (overlapStart >= overlapEnd && !empty) continue
++		const originalStart =
++			overlapStart === limit
++				? segment.end
++				: Math.min(segment.end, segment.start + overlapStart - segment.offset)
++		const originalEnd =
++			overlapEnd === limit
++				? segment.end
++				: Math.min(segment.end, segment.start + overlapEnd - segment.offset)
++		segments.push({
++			offset: overlapStart - start,
++			start: originalStart,
++			end: originalEnd,
++		})
++	}
++	return { text: source.text.slice(start, end), segments }
++}
++
++/**
++ * Joins offset-bearing markdown sources while mapping a separator to the original
++ * region between adjacent mapped sources.
++ *
++ * @param sources - The sources to join
++ * @param separator - The derived text inserted between sources
++ * @returns The joined text and every source-backed segment
++ *
++ * @example
++ * ```ts
++ * joinSources(splitLines('a\nb'), '\n')
++ * // { text: 'a\nb', segments: [...] }
++ * ```
++ */
++export function joinSources(sources: readonly MarkdownSource[], separator: string): MarkdownSource {
++	let text = ''
++	const segments: MarkdownSegment[] = []
++	for (let index = 0; index < sources.length; index += 1) {
++		const source = sources[index]
++		if (source === undefined) continue
++		if (index > 0) {
++			const previous = sources[index - 1]
++			const left = previous?.segments[previous.segments.length - 1]
++			const right = source.segments[0]
++			if (
++				separator.length > 0 &&
++				left !== undefined &&
++				right !== undefined &&
++				left.end < right.start
++			)
++				segments.push({ offset: text.length, start: left.end, end: right.start })
++			text += separator
++		}
++		for (const segment of source.segments) {
++			segments.push({
++				offset: text.length + segment.offset,
++				start: segment.start,
++				end: segment.end,
++			})
++		}
++		text += source.text
++	}
++	return { text, segments }
++}
++
++/**
++ * Projects a derived text range through its segments to a half-open region of the
++ * original markdown string.
++ *
++ * @param source - The offset-bearing source carrying the range
++ * @param from - The inclusive derived-text boundary
++ * @param to - The exclusive derived-text boundary
++ * @returns The original-string span, or `undefined` when either boundary is unmapped
++ *
++ * @example
++ * ```ts
++ * projectSpan({ text: 'a', segments: [{ offset: 0, start: 4, end: 5 }] }, 0, 1)
++ * // { start: 4, end: 5 }
++ * ```
++ */
++export function projectSpan(
++	source: MarkdownSource,
++	from: number,
++	to: number,
++): MarkdownSpan | undefined {
++	if (from < 0 || to < from || to > source.text.length) return undefined
++	let start: number | undefined
++	let end: number | undefined
++	for (let index = 0; index < source.segments.length; index += 1) {
++		const segment = source.segments[index]
++		if (segment === undefined) continue
++		const next = source.segments[index + 1]
++		const limit = Math.min(
++			segment.offset + (segment.end - segment.start),
++			next === undefined ? source.text.length : next.offset,
++		)
++		if (from === to && from >= segment.offset && from <= limit) {
++			const position =
++				from === limit ? segment.end : Math.min(segment.end, segment.start + from - segment.offset)
++			return { start: position, end: position }
++		}
++		if (start === undefined && from >= segment.offset && from < limit)
++			start = segment.start + from - segment.offset
++		if (to > segment.offset && to <= limit)
++			end = to === limit ? segment.end : Math.min(segment.end, segment.start + to - segment.offset)
++	}
++	return start === undefined || end === undefined ? undefined : { start, end }
++}
++
+ /**
+  * The count of leading space / tab characters on `line` (a tab counts as one) - the
+  * indent that decides whether a list item's continuation belongs to the item.
+@@ -111,27 +269,38 @@ export function countIndent(line: string): number {
+ //  Block-level detection
+ 
+ /**
+- * Extract an ATX heading line (`#` … `######` followed by text) into its
+- * `{ level, text }`, or `undefined` when `line` is not a heading. A run of more than 6
+- * `#`s, or `#`s not followed by whitespace + text, is not a
+- * heading; an optional closing `###` run is stripped.
++ * Extracts an ATX heading line (`#` … `######` followed by text) into its level,
++ * trimmed text, and the text's offset inside the line. A run of more than 6 `#`s, or
++ * `#`s not followed by whitespace + text, is not a heading; an optional closing
++ * `###` run is stripped.
+  *
+  * @param line - The candidate line
+- * @returns The heading level (1–6) and its raw inline text, or `undefined`
++ * @returns The heading level (1–6), raw inline text, and text offset, or `undefined`
+  *
+  * @example
+  * ```ts
+- * extractHeading('## Title') // { level: 2, text: 'Title' }
++ * extractHeading('## Title') // { level: 2, text: 'Title', offset: 3 }
+  * ```
+  */
+ export function extractHeading(
+ 	line: string,
+-): { readonly level: number; readonly text: string } | undefined {
+-	const match = /^(#{1,6})(?:\s+(.*))?$/.exec(line.trimStart())
++): { readonly level: number; readonly text: string; readonly offset: number } | undefined {
++	const trimmed = line.trimStart()
++	const match = /^(#{1,6})(?:\s+(.*))?$/.exec(trimmed)
+ 	if (!match || match[1] === undefined) return undefined
+ 	const level = match[1].length
+-	const text = (match[2] ?? '').replace(/\s+#+\s*$/, '').trim()
+-	return { level, text }
++	const raw = match[2] ?? ''
++	const withoutClosing = raw.replace(/\s+#+\s*$/, '')
++	const text = withoutClosing.trim()
++	const found = raw.length === 0 ? trimmed.length : trimmed.indexOf(raw, level)
++	const content = found < 0 ? trimmed.length : found
++	const offset =
++		line.length -
++		trimmed.length +
++		content +
++		withoutClosing.length -
++		withoutClosing.trimStart().length
++	return { level, text, offset }
+ }
+ 
+ /**
+@@ -197,19 +366,22 @@ export function extractListItem(line: string): ListItemMatch | undefined {
+ }
+ 
+ /**
+- * Strip one level of blockquote marker (`>` plus one optional following space) from a
+- * blockquote line, so the de-quoted lines re-parse as nested blocks.
++ * Strips one level of blockquote marker (`>` plus one optional following space) from
++ * an offset-bearing blockquote line, so the de-quoted source re-parses as nested
++ * blocks without losing its original coordinates.
+  *
+- * @param line - A blockquote line (per {@link isQuote})
+- * @returns The line with its leading `>` (and one space) removed
++ * @param source - A blockquote line (per {@link isQuote})
++ * @returns The source with its leading `>` and optional space removed
+  *
+  * @example
+  * ```ts
+- * stripQuote('> text') // 'text'
++ * stripQuote({ text: '> text', segments: [{ offset: 0, start: 0, end: 6 }] })
++ * // { text: 'text', segments: [{ offset: 0, start: 2, end: 6 }] }
+  * ```
+  */
+-export function stripQuote(line: string): string {
+-	return line.replace(/^\s{0,3}>\s?/, '')
++export function stripQuote(source: MarkdownSource): MarkdownSource {
++	const marker = /^\s{0,3}>\s?/.exec(source.text)?.[0] ?? ''
++	return sliceSource(source, marker.length, source.text.length)
+ }
+ 
+ /**
+@@ -782,7 +954,13 @@ export function collectList(
+ 			itemLines.push(next.trim()) // a lazy paragraph-continuation line
+ 			index += 1
+ 		}
+-		items.push({ element: 'listItem', children: parseBlocks(itemLines, depth + 1) })
++		items.push({
++			element: 'listItem',
++			children: parseBlocks(
++				itemLines.map((text) => ({ text, segments: [] })),
++				depth + 1,
++			),
++		})
+ 	}
+ 	return { node: { element: 'list', ordered, start: startOrdinal, items }, next: index }
+ }
+diff --git a/src/core/parsers.ts b/src/core/parsers.ts
+index 735e619..1d8abb8 100644
+--- a/src/core/parsers.ts
++++ b/src/core/parsers.ts
+@@ -1,4 +1,4 @@
+-import type { BlockNode, InlineNode, MarkdownDocument } from './types.js'
++import type { BlockNode, InlineNode, MarkdownDocument, MarkdownSource } from './types.js'
+ import {
+ 	coalesceText,
+ 	collectList,
+@@ -25,19 +25,20 @@ import { isNonEmptyArray } from '@orkestrel/contract'
+  *
+  * @example
+  * ```ts
+- * parseBlocks(['# Hi'], 0) // [{ element: 'heading', level: 1, children: [...] }]
++ * parseBlocks(splitLines('# Hi'), 0) // [{ element: 'heading', level: 1, children: [...] }]
+  * ```
+  */
+-export function parseBlocks(lines: readonly string[], depth: number): readonly BlockNode[] {
++export function parseBlocks(lines: readonly MarkdownSource[], depth: number): readonly BlockNode[] {
++	const text = lines.map((line) => line.text)
+ 	if (depth >= MAX_DEPTH) {
+ 		return lines.length > 0
+-			? [{ element: 'paragraph', children: [{ element: 'text', value: lines.join('\n') }] }]
++			? [{ element: 'paragraph', children: [{ element: 'text', value: text.join('\n') }] }]
+ 			: []
+ 	}
+ 	const blocks: BlockNode[] = []
+ 	let index = 0
+ 	while (index < lines.length) {
+-		const line = lines[index] ?? ''
++		const line = text[index] ?? ''
+ 		if (isBlankLine(line)) {
+ 			index += 1
+ 			continue
+@@ -46,8 +47,8 @@ export function parseBlocks(lines: readonly string[], depth: number): readonly B
+ 		if (fence) {
+ 			const body: string[] = []
+ 			index += 1
+-			while (index < lines.length && !isFenceClose(lines[index] ?? '', fence.marker)) {
+-				body.push(lines[index] ?? '')
++			while (index < lines.length && !isFenceClose(text[index] ?? '', fence.marker)) {
++				body.push(text[index] ?? '')
+ 				index += 1
+ 			}
+ 			index += 1 // step past the closing fence (a no-op past EOF)
+@@ -74,22 +75,24 @@ export function parseBlocks(lines: readonly string[], depth: number): readonly B
+ 			continue
+ 		}
+ 		if (isQuote(line)) {
+-			const quoted: string[] = []
+-			while (index < lines.length && isQuote(lines[index] ?? '')) {
+-				quoted.push(stripQuote(lines[index] ?? ''))
++			const quoted: MarkdownSource[] = []
++			while (index < lines.length && isQuote(text[index] ?? '')) {
++				const quotedLine = lines[index]
++				if (quotedLine === undefined) break
++				quoted.push(stripQuote(quotedLine))
+ 				index += 1
+ 			}
+ 			blocks.push({ element: 'blockquote', children: parseBlocks(quoted, depth + 1) })
+ 			continue
+ 		}
+-		if (isTableStart(line, lines[index + 1])) {
+-			const table = collectTable(lines, index)
++		if (isTableStart(line, text[index + 1])) {
++			const table = collectTable(text, index)
+ 			blocks.push(table.node)
+ 			index = table.next
+ 			continue
+ 		}
+ 		if (extractListItem(line)) {
+-			const list = collectList(lines, index, depth)
++			const list = collectList(text, index, depth)
+ 			blocks.push(list.node)
+ 			index = list.next
+ 			continue
+@@ -97,10 +100,10 @@ export function parseBlocks(lines: readonly string[], depth: number): readonly B
+ 		const paragraph: string[] = []
+ 		while (
+ 			index < lines.length &&
+-			!isBlankLine(lines[index] ?? '') &&
+-			!(isNonEmptyArray(paragraph) && startsBlock(lines, index))
++			!isBlankLine(text[index] ?? '') &&
++			!(isNonEmptyArray(paragraph) && startsBlock(text, index))
+ 		) {
+-			paragraph.push(lines[index] ?? '')
++			paragraph.push(text[index] ?? '')
+ 			index += 1
+ 		}
+ 		const source = paragraph
+diff --git a/src/core/types.ts b/src/core/types.ts
+index 497466c..7fb6275 100644
+--- a/src/core/types.ts
++++ b/src/core/types.ts
+@@ -35,6 +35,62 @@ export interface ListItemMatch {
+ 	readonly marker: number
+ }
+ 
++/**
++ * A half-open region of the ORIGINAL markdown string, in UTF-16 code units -
++ * `start` inclusive, `end` exclusive. The provenance a parse records for a node and
++ * {@link MarkdownInterface.span} reads back.
++ *
++ * @remarks
++ * The coordinates address the string the workspace was constructed from, never the
++ * line text a later phase walks, so `markdown.slice(span.start, span.end)` returns
++ * the source the node was parsed from. The region's length is `end - start`; no
++ * length member exists to drift from the two offsets.
++ */
++export interface MarkdownSpan {
++	/** The first code unit of the region, inclusive. */
++	readonly start: number
++	/** The code unit one past the region's last, exclusive. */
++	readonly end: number
++}
++
++/**
++ * One run of a {@link MarkdownSource} - the mapping from a stretch of derived text
++ * back to the region of the ORIGINAL markdown string it was taken from.
++ *
++ * @remarks
++ * `offset` addresses {@link MarkdownSource.text}; `start` and `end` address the
++ * original string. The run's length is `end - start` in both, so no length member
++ * exists, and a position `p` inside the run projects back to `start + (p - offset)`.
++ * Every strip, trim, and join the block phase performs is affine at this
++ * granularity, which is what lets a derived offset carry an original coordinate.
++ */
++export interface MarkdownSegment {
++	/** The first code unit of the run inside {@link MarkdownSource.text}. */
++	readonly offset: number
++	/** The first code unit of the original-string region the run came from, inclusive. */
++	readonly start: number
++	/** The code unit one past that region's last, exclusive. */
++	readonly end: number
++}
++
++/**
++ * A piece of derived markdown text paired with the runs mapping it back to the
++ * original string - what `splitLines` returns per line, so every phase downstream of
++ * it keeps original coordinates instead of reconstructing them from node values.
++ *
++ * @remarks
++ * `text` is the line a parser reads: its terminator, `>` quote marker, or leading
++ * indent already removed. `segments` cover `text` in ascending `offset` order, one
++ * run per contiguous stretch of the original; a piece assembled from separate
++ * stretches carries one segment per stretch.
++ */
++export interface MarkdownSource {
++	/** The derived text a parser reads. */
++	readonly text: string
++	/** The runs mapping `text` back to the original string, in ascending `offset` order. */
++	readonly segments: readonly MarkdownSegment[]
++}
++
+ /**
+  * A run of plain text - the leaf inline node. `value` is the decoded text with
+  * markdown escapes (`\*`, `\_`, …) already resolved to their literal characters;
+@@ -328,6 +384,41 @@ export interface MarkdownHandlers<T> {
+  */
+ export type MarkdownRewriteHandler = (node: MarkdownNode) => MarkdownNode
+ 
++/**
++ * A parsed document paired with the {@link MarkdownSpan} of each of its nodes - what
++ * `parseProvenance` returns, and what `parseDocument` projects the document out of.
++ *
++ * @remarks
++ * `spans` is keyed by node identity, so it addresses the nodes of THAT document and
++ * no other; a node built from separate regions of the source, or from none, is
++ * absent rather than mapped to a placeholder region. Destructure it as
++ * `const [document, spans] = parseProvenance(markdown)`.
++ */
++export type MarkdownParseResult = readonly [
++	document: MarkdownDocument,
++	spans: ReadonlyMap<MarkdownNode, MarkdownSpan>,
++]
++
++/**
++ * A rewritten value paired with the input node each rewritten node came from - what
++ * `rewriteDocument` returns, so provenance survives a rewrite instead of ending at
++ * it. `T` is the rewritten value: the document for a whole-document rewrite.
++ *
++ * @remarks
++ * `derivations` is keyed by the nodes of the OUTPUT and read against the source
++ * workspace's own spans:
++ *
++ * - a node mapped to an input node takes that input's span;
++ * - a node mapped to `undefined` was produced from separate sources - a joined text
++ *   run, a synthesized paragraph - so no single input covers it and it has no span;
++ * - an absent entry means the output node kept its own identity, unchanged by the
++ *   rewrite, so the span it already had still stands.
++ */
++export type MarkdownDerivation<T> = readonly [
++	value: T,
++	derivations: ReadonlyMap<MarkdownNode, MarkdownNode | undefined>,
++]
++
+ /**
+  * A stateful, parsed markdown document: the typed {@link MarkdownDocument} AST plus
+  * the query, rewrite, and fold operations over it.
+@@ -345,10 +436,10 @@ export type MarkdownRewriteHandler = (node: MarkdownNode) => MarkdownNode
+  *   of demand. Cancellable via the returned stream's own `cancel()`, async-iterable
+  *   wherever the platform supports it (Node, Deno, and browsers that ship the
+  *   proposal), and pipeable through any {@link TransformStream} / {@link WritableStream}.
+- * - **The seven-method surface.** `document` (the AST root), `walk` (the deep
+- *   traversal), `find` / `filter` / `reduce` (queries built on `walk`), `map` (the
+- *   bottom-up rewrite), `fold` (the total catamorphism), and `stream` (the shallow,
+- *   backpressured top-level source).
++ * - **The surface.** `document` (the AST root), `walk` (the deep traversal), `find` /
++ *   `filter` / `reduce` (queries built on `walk`), `span` (the region of the original
++ *   markdown a node was parsed from), `map` (the bottom-up rewrite), `fold` (the
++ *   total catamorphism), and `stream` (the shallow, backpressured top-level source).
+  */
+ export interface MarkdownInterface {
+ 	/** The stored {@link MarkdownDocument} AST root. */
+@@ -371,6 +462,23 @@ export interface MarkdownInterface {
+ 	filter<T extends MarkdownNode>(guard: (node: MarkdownNode) => node is T): readonly T[]
+ 	/** Collects every node (depth-first, pre-order) matching a predicate. */
+ 	filter(predicate: (node: MarkdownNode) => boolean): readonly MarkdownNode[]
++	/**
++	 * Reads the region of the original markdown string a node was parsed from.
++	 *
++	 * @param node - A node of this workspace's document.
++	 * @returns A fresh {@link MarkdownSpan}, or `undefined` when the node has no single
++	 * source region.
++	 *
++	 * @remarks
++	 * Provenance is per workspace and per node identity, so a node reports a region
++	 * only where THIS workspace parsed it from a string. A workspace constructed from
++	 * an adopted {@link MarkdownDocument} reports `undefined` for every node: it parsed
++	 * no string, so no coordinates exist to report. A node assembled from separate
++	 * sources - a joined text run, a synthesized paragraph - reports `undefined` too,
++	 * because no single region of the original covers it. Each call returns a fresh
++	 * value rather than the stored one.
++	 */
++	span(node: MarkdownNode): MarkdownSpan | undefined
+ 	/** Rewrites the AST bottom-up (copy-on-write) and returns a new {@link MarkdownInterface}. */
+ 	map(rewrite: MarkdownRewriteHandler): MarkdownInterface
+ 	/** Folds the AST depth-first, pre-order into an accumulator. */
+diff --git a/tests/src/core/helpers.test.ts b/tests/src/core/helpers.test.ts
+index 89aa996..e4b4902 100644
+--- a/tests/src/core/helpers.test.ts
++++ b/tests/src/core/helpers.test.ts
+@@ -7,6 +7,7 @@ import type {
+ 	MarkdownHandlers,
+ 	MarkdownNode,
+ 	ParagraphNode,
++	MarkdownSource,
+ 	TableNode,
+ } from '@src/core'
+ import {
+@@ -22,11 +23,13 @@ import {
+ 	htmlToMarkdown,
+ 	countIndent,
+ 	markdownToHTML,
++	joinSources,
+ 	mergeProjections,
+ 	normalizeInlines,
+ 	parseDocument,
+ 	projectHTMLLeaf,
+ 	projectHTMLNode,
++	projectSpan,
+ 	projectionToBlocks,
+ 	projectionToInlines,
+ 	renderHTML,
+@@ -36,6 +39,7 @@ import {
+ 	scanEmphasis,
+ 	scanInline,
+ 	scanLink,
++	sliceSource,
+ 	splitLines,
+ 	splitTableRow,
+ 	startsBlock,
+@@ -72,27 +76,181 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
+ 
+ describe('splitLines', () => {
+ 	it('splits on \\n', () => {
+-		expect(splitLines('a\nb\nc')).toEqual(['a', 'b', 'c'])
++		expect(splitLines('a\nb\nc').map((line) => line.text)).toEqual(['a', 'b', 'c'])
+ 	})
+ 
+ 	it('normalizes CRLF and bare CR to \\n', () => {
+-		expect(splitLines('a\r\nb\rc')).toEqual(['a', 'b', 'c'])
++		expect(splitLines('a\r\nb\rc').map((line) => line.text)).toEqual(['a', 'b', 'c'])
+ 	})
+ 
+ 	it('normalizes mixed line endings in one document', () => {
+-		expect(splitLines('a\r\nb\nc\rd')).toEqual(['a', 'b', 'c', 'd'])
++		expect(splitLines('a\r\nb\nc\rd').map((line) => line.text)).toEqual(['a', 'b', 'c', 'd'])
+ 	})
+ 
+ 	it('drops a single trailing-newline empty line but keeps interior blanks', () => {
+-		expect(splitLines('a\n\nb\n')).toEqual(['a', '', 'b'])
++		expect(splitLines('a\n\nb\n').map((line) => line.text)).toEqual(['a', '', 'b'])
++	})
++
++	it('drops one trailing LF, CR, or CRLF terminator', () => {
++		expect(splitLines('a\n').map((line) => line.text)).toEqual(['a'])
++		expect(splitLines('a\r').map((line) => line.text)).toEqual(['a'])
++		expect(splitLines('a\r\n').map((line) => line.text)).toEqual(['a'])
+ 	})
+ 
+ 	it('keeps multiple trailing blank lines except the very last', () => {
+-		expect(splitLines('a\n\n\n')).toEqual(['a', '', ''])
++		expect(splitLines('a\n\n\n').map((line) => line.text)).toEqual(['a', '', ''])
+ 	})
+ 
+ 	it('returns a single empty line for an empty string', () => {
+-		expect(splitLines('')).toEqual([''])
++		expect(splitLines('').map((line) => line.text)).toEqual([''])
++	})
++
++	it('maps normalized lines to their original UTF-16 offsets', () => {
++		const markdown = 'alpha\r\nbeta\rgamma\0🙂\nomega\n'
++		const lines = splitLines(markdown)
++		expect(lines).toEqual([
++			{ text: 'alpha', segments: [{ offset: 0, start: 0, end: 5 }] },
++			{ text: 'beta', segments: [{ offset: 0, start: 7, end: 11 }] },
++			{ text: 'gamma\0🙂', segments: [{ offset: 0, start: 12, end: 20 }] },
++			{ text: 'omega', segments: [{ offset: 0, start: 21, end: 26 }] },
++		])
++		for (const line of lines) {
++			const segment = line.segments[0]
++			if (segment === undefined) continue
++			expect(markdown.slice(segment.start, segment.end)).toBe(line.text)
++		}
++	})
++})
++
++describe('sliceSource', () => {
++	it('narrows a mapped run to the requested text range', () => {
++		const source: MarkdownSource = {
++			text: 'alpha',
++			segments: [{ offset: 0, start: 10, end: 15 }],
++		}
++		expect(sliceSource(source, 1, 4)).toEqual({
++			text: 'lph',
++			segments: [{ offset: 0, start: 11, end: 14 }],
++		})
++	})
++
++	it('returns no segment for a range that misses every mapped run', () => {
++		const source: MarkdownSource = {
++			text: 'a_b',
++			segments: [
++				{ offset: 0, start: 0, end: 1 },
++				{ offset: 2, start: 2, end: 3 },
++			],
++		}
++		expect(sliceSource(source, 1, 2)).toEqual({ text: '_', segments: [] })
++	})
++
++	it('preserves the whole source at its boundaries', () => {
++		const source: MarkdownSource = {
++			text: 'edge',
++			segments: [{ offset: 0, start: 4, end: 8 }],
++		}
++		expect(sliceSource(source, 0, 4)).toEqual(source)
++	})
++
++	it('keeps a fabricated blank source without inventing a segment', () => {
++		expect(sliceSource({ text: '', segments: [] }, 0, 0)).toEqual({ text: '', segments: [] })
++	})
++})
++
++describe('joinSources', () => {
++	it('maps a separator to the original newline between sources', () => {
++		const sources: readonly MarkdownSource[] = [
++			{ text: 'a', segments: [{ offset: 0, start: 0, end: 1 }] },
++			{ text: 'b', segments: [{ offset: 0, start: 2, end: 3 }] },
++		]
++		expect(joinSources(sources, '\n')).toEqual({
++			text: 'a\nb',
++			segments: [
++				{ offset: 0, start: 0, end: 1 },
++				{ offset: 1, start: 1, end: 2 },
++				{ offset: 2, start: 2, end: 3 },
++			],
++		})
++	})
++
++	it('maps a normalized separator across an original CRLF boundary', () => {
++		const sources: readonly MarkdownSource[] = [
++			{ text: 'a', segments: [{ offset: 0, start: 0, end: 1 }] },
++			{ text: 'b', segments: [{ offset: 0, start: 3, end: 4 }] },
++		]
++		const joined = joinSources(sources, '\n')
++		expect(joined).toEqual({
++			text: 'a\nb',
++			segments: [
++				{ offset: 0, start: 0, end: 1 },
++				{ offset: 1, start: 1, end: 3 },
++				{ offset: 2, start: 3, end: 4 },
++			],
++		})
++		expect(projectSpan(joined, 1, 2)).toEqual({ start: 1, end: 3 })
++	})
++
++	it('returns an empty source when no sources can contribute', () => {
++		expect(joinSources([], '\n')).toEqual({ text: '', segments: [] })
++	})
++
++	it('preserves a single source without adding a boundary', () => {
++		const source: MarkdownSource = {
++			text: 'edge',
++			segments: [{ offset: 0, start: 4, end: 8 }],
++		}
++		expect(joinSources([source], '\n')).toEqual(source)
++	})
++
++	it('does not map separators around a fabricated blank source', () => {
++		const sources: readonly MarkdownSource[] = [
++			{ text: 'a', segments: [{ offset: 0, start: 0, end: 1 }] },
++			{ text: '', segments: [] },
++			{ text: 'b', segments: [{ offset: 0, start: 2, end: 3 }] },
++		]
++		expect(joinSources(sources, '\n')).toEqual({
++			text: 'a\n\nb',
++			segments: [
++				{ offset: 0, start: 0, end: 1 },
++				{ offset: 3, start: 2, end: 3 },
++			],
++		})
++	})
++})
++
++describe('projectSpan', () => {
++	it('projects a range across mapped source runs', () => {
++		const source: MarkdownSource = {
++			text: 'a\nb',
++			segments: [
++				{ offset: 0, start: 0, end: 1 },
++				{ offset: 1, start: 1, end: 2 },
++				{ offset: 2, start: 2, end: 3 },
++			],
++		}
++		expect(projectSpan(source, 0, 3)).toEqual({ start: 0, end: 3 })
++	})
++
++	it('returns undefined when either boundary misses every segment', () => {
++		const source: MarkdownSource = {
++			text: '_a_',
++			segments: [{ offset: 1, start: 4, end: 5 }],
++		}
++		expect(projectSpan(source, 0, 2)).toBeUndefined()
++		expect(projectSpan(source, 1, 3)).toBeUndefined()
++	})
++
++	it('projects exact segment boundaries', () => {
++		const source: MarkdownSource = {
++			text: 'edge',
++			segments: [{ offset: 0, start: 4, end: 8 }],
++		}
++		expect(projectSpan(source, 0, 4)).toEqual({ start: 4, end: 8 })
++	})
++
++	it('returns undefined for a fabricated blank source', () => {
++		expect(projectSpan({ text: '', segments: [] }, 0, 0)).toBeUndefined()
+ 	})
+ })
+ 
+@@ -118,12 +276,12 @@ describe('countIndent', () => {
+ 
+ describe('extractHeading', () => {
+ 	it('extracts every level 1-6 with its level and text', () => {
+-		expect(extractHeading('# A')).toEqual({ level: 1, text: 'A' })
+-		expect(extractHeading('## A')).toEqual({ level: 2, text: 'A' })
+-		expect(extractHeading('### A')).toEqual({ level: 3, text: 'A' })
+-		expect(extractHeading('#### A')).toEqual({ level: 4, text: 'A' })
+-		expect(extractHeading('##### A')).toEqual({ level: 5, text: 'A' })
+-		expect(extractHeading('###### A')).toEqual({ level: 6, text: 'A' })
++		expect(extractHeading('# A')).toEqual({ level: 1, text: 'A', offset: 2 })
++		expect(extractHeading('## A')).toEqual({ level: 2, text: 'A', offset: 3 })
++		expect(extractHeading('### A')).toEqual({ level: 3, text: 'A', offset: 4 })
++		expect(extractHeading('#### A')).toEqual({ level: 4, text: 'A', offset: 5 })
++		expect(extractHeading('##### A')).toEqual({ level: 5, text: 'A', offset: 6 })
++		expect(extractHeading('###### A')).toEqual({ level: 6, text: 'A', offset: 7 })
+ 	})
+ 
+ 	it('rejects a no-space #tag', () => {
+@@ -135,12 +293,16 @@ describe('extractHeading', () => {
+ 	})
+ 
+ 	it('strips a closing ### run and trailing whitespace', () => {
+-		expect(extractHeading('## Title ##')).toEqual({ level: 2, text: 'Title' })
+-		expect(extractHeading('# Title   ')).toEqual({ level: 1, text: 'Title' })
++		expect(extractHeading('## Title ##')).toEqual({ level: 2, text: 'Title', offset: 3 })
++		expect(extractHeading('# Title   ')).toEqual({ level: 1, text: 'Title', offset: 2 })
+ 	})
+ 
+ 	it('yields empty text for a bare heading marker with no text', () => {
+-		expect(extractHeading('###')).toEqual({ level: 3, text: '' })
++		expect(extractHeading('###')).toEqual({ level: 3, text: '', offset: 3 })
++	})
++
++	it('locates trimmed heading text inside the original line', () => {
++		expect(extractHeading('  ##   Title ##  ')).toEqual({ level: 2, text: 'Title', offset: 7 })
+ 	})
+ })
+ 
+@@ -225,12 +387,21 @@ describe('extractListItem', () => {
+ 
+ describe('stripQuote', () => {
+ 	it('de-quotes a blockquote line, with or without the following space', () => {
+-		expect(stripQuote('> hi')).toBe('hi')
+-		expect(stripQuote('>hi')).toBe('hi')
++		expect(stripQuote({ text: '> hi', segments: [{ offset: 0, start: 0, end: 4 }] })).toEqual({
++			text: 'hi',
++			segments: [{ offset: 0, start: 2, end: 4 }],
++		})
++		expect(stripQuote({ text: '>hi', segments: [{ offset: 0, start: 5, end: 8 }] })).toEqual({
++			text: 'hi',
++			segments: [{ offset: 0, start: 6, end: 8 }],
++		})
+ 	})
+ 
+ 	it('strips up to 3 leading spaces before the marker', () => {
+-		expect(stripQuote('   > hi')).toBe('hi')
++		expect(stripQuote({ text: '   > hi', segments: [{ offset: 0, start: 10, end: 17 }] })).toEqual({
++			text: 'hi',
++			segments: [{ offset: 0, start: 15, end: 17 }],
++		})
+ 	})
+ })
+ 
+diff --git a/tests/src/core/parsers.test.ts b/tests/src/core/parsers.test.ts
+index 356cfe5..87c7158 100644
+--- a/tests/src/core/parsers.test.ts
++++ b/tests/src/core/parsers.test.ts
+@@ -15,7 +15,7 @@ import {
+ 	firstBlock,
+ 	inlineText,
+ } from '../../setup.js'
+-import { MAX_DEPTH, parseBlocks, parseDocument, parseInline } from '@src/core'
++import { MAX_DEPTH, parseBlocks, parseDocument, parseInline, splitLines } from '@src/core'
+ 
+ // The markdown parser's parse-behavior surface — parseDocument (the block phase
+ // entry point), parseInline (the inline phase entry point), and the block-phase
+@@ -727,7 +727,7 @@ describe('parseDocument — round-trip over a self-contained composite document'
+ 
+ describe('parseBlocks', () => {
+ 	it('honors the depth parameter — parseBlocks(lines, MAX_DEPTH) degrades to one literal paragraph', () => {
+-		const blocks = parseBlocks(['# heading', 'plain'], MAX_DEPTH)
++		const blocks = parseBlocks(splitLines('# heading\nplain'), MAX_DEPTH)
+ 		expect(blocks).toHaveLength(1)
+ 		expect(blocks[0]?.element).toBe('paragraph')
+ 	})
+@@ -737,7 +737,7 @@ describe('parseBlocks', () => {
+ 	})
+ 
+ 	it('parses normally below MAX_DEPTH', () => {
+-		const blocks = parseBlocks(['# h', 'para'], 0)
++		const blocks = parseBlocks(splitLines('# h\npara'), 0)
+ 		expect(blocks.map((block) => block.element)).toEqual(['heading', 'paragraph'])
+ 	})
+ })

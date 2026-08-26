@@ -1,0 +1,3 @@
+ M guides/mcp.md
+ M tests/guides.test.ts
+ M tests/src/core/MCPClient.test.ts
