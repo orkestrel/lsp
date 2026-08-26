@@ -1,0 +1,289 @@
+diff --git a/src/core/Markdown.ts b/src/core/Markdown.ts
+index b77e92d..062ef0b 100644
+--- a/src/core/Markdown.ts
++++ b/src/core/Markdown.ts
+@@ -5,9 +5,10 @@ import type {
+ 	MarkdownInterface,
+ 	MarkdownNode,
+ 	MarkdownRewriteHandler,
++	MarkdownSpan,
+ } from './types.js'
+ import { foldNode, rewriteDocument, walkNodes } from './helpers.js'
+-import { parseDocument } from './parsers.js'
++import { parseProvenance } from './parsers.js'
+ 
+ /**
+  * A stateful, parsed markdown document - wraps a typed {@link MarkdownDocument} AST
+@@ -15,12 +16,22 @@ import { parseDocument } from './parsers.js'
+  * streaming operations {@link MarkdownInterface} declares.
+  *
+  * @remarks
+- * - **Construction.** Given a `string`, the constructor runs {@link parseDocument} (the
+- *   block phase then the inline phase) to build the AST. Given a {@link MarkdownDocument},
+- *   the document is adopted AS-IS and is NOT re-validated - a caller adopting an
+- *   untrusted value should gate it with `isMarkdownDocument` first.
++ * - **Construction.** Given a `string`, the constructor runs {@link parseProvenance} (the
++ *   block phase then the inline phase) once, keeping the AST and a COPY of the span map
++ *   that parse recorded. Given a {@link MarkdownDocument}, the document is adopted AS-IS
++ *   and is NOT re-validated - gate an untrusted value with `isMarkdownDocument` first.
++ * - **Provenance.** {@link span} reads the region of the ORIGINAL constructor string a
++ *   node came from, and it is handle-relative: a string-constructed handle exposes the
++ *   regions of the nodes it parsed, an adopted document exposes none, and a node from
++ *   another handle reports `undefined` here whatever that handle reports. Each call
++ *   returns a fresh value. A node with no single source region - a joined text run, a
++ *   synthesized paragraph, an output built from separate sources - reports `undefined`.
++ *   {@link map} carries provenance across the rewrite: an unchanged node keeps its
++ *   region, a one-source replacement takes the region of the node it replaced, and a
++ *   rebuilt parent takes its original's.
+  * - **Immutable.** {@link map} never mutates the stored AST - it returns a NEW `Markdown`
+- *   instance; the document root invariant (`element: 'document'`) always holds.
++ *   instance; the document root invariant (`element: 'document'`) always holds. An
++ *   identity rewrite still returns a new handle, over the same document tree.
+  * - **Traversal order.** {@link walk} and the `find` / `filter` / `reduce` queries built
+  *   on it walk the AST depth-first, pre-order, root-inclusive (via {@link walkNodes});
+  *   `stream` is shallow - only the document's direct block children.
+@@ -39,9 +50,17 @@ import { parseDocument } from './parsers.js'
+  */
+ export class Markdown implements MarkdownInterface {
+ 	readonly #document: MarkdownDocument
++	readonly #spans: Map<MarkdownNode, MarkdownSpan>
+ 
+ 	constructor(input: string | MarkdownDocument) {
+-		this.#document = typeof input === 'string' ? parseDocument(input) : input
++		if (typeof input === 'string') {
++			const [document, spans] = parseProvenance(input)
++			this.#document = document
++			this.#spans = new Map(spans)
++		} else {
++			this.#document = input
++			this.#spans = new Map()
++		}
+ 	}
+ 
+ 	/** The stored {@link MarkdownDocument} AST root. */
+@@ -49,6 +68,28 @@ export class Markdown implements MarkdownInterface {
+ 		return this.#document
+ 	}
+ 
++	/**
++	 * Reads the region of the original markdown string a node of this handle's tree came
++	 * from.
++	 *
++	 * @param node - The node whose provenance to read
++	 * @returns A fresh {@link MarkdownSpan}, or `undefined` when the node has no single
++	 * source region here
++	 *
++	 * @example
++	 * ```ts
++	 * const source = '# Title\n\npara'
++	 * const markdown = new Markdown(source)
++	 * const heading = markdown.find(isHeadingNode)
++	 * const span = heading && markdown.span(heading)
++	 * span && source.slice(span.start, span.end) // '# Title'
++	 * ```
++	 */
++	span(node: MarkdownNode): MarkdownSpan | undefined {
++		const span = this.#spans.get(node)
++		return span === undefined ? undefined : { start: span.start, end: span.end }
++	}
++
+ 	/**
+ 	 * THE deep traversal - a lazy, depth-first, pre-order, root-inclusive generator
+ 	 * over every {@link MarkdownNode} in the document. `find` / `filter` / `reduce`
+@@ -89,9 +130,18 @@ export class Markdown implements MarkdownInterface {
+ 		return out
+ 	}
+ 
+-	/** Rewrites the AST bottom-up (copy-on-write) and returns a new {@link Markdown}. */
++	/**
++	 * Rewrites the AST bottom-up (copy-on-write) and returns a new {@link Markdown},
++	 * carrying each output node's provenance across the rewrite. A rewrite that returns
++	 * its node unchanged shares that subtree instead of copying it, so an identity
++	 * rewrite copies no node and still returns a new handle.
++	 *
++	 * @param rewrite - The bottom-up node rewrite
++	 * @returns A new handle over the rewritten document
++	 */
+ 	map(rewrite: MarkdownRewriteHandler): MarkdownInterface {
+-		return new Markdown(rewriteDocument(this.#document, rewrite))
++		const [document, derivations] = rewriteDocument(this.#document, rewrite)
++		return this.#derive(document, derivations)
+ 	}
+ 
+ 	/** Folds the AST depth-first, pre-order into an accumulator. */
+@@ -147,4 +197,34 @@ export class Markdown implements MarkdownInterface {
+ 			},
+ 		})
+ 	}
++
++	// Creates the operation's new handle and resolves each output node through this
++	// operation's one-source derivation chain. Each candidate's own span is read BEFORE
++	// its derivation entry is followed, and a visited set stops the walk on a cycle. That
++	// ordering is load-bearing: a handler that hands back an original node gives that
++	// object an output entry pointing at the slot it was placed in, so reading the span
++	// first terminates the chain on the node's own region instead of following that entry
++	// onto a foreign one - both when the node is being resolved and when a later hop
++	// reaches it as someone else's source.
++	#derive(
++		document: MarkdownDocument,
++		derivations: ReadonlyMap<MarkdownNode, MarkdownNode | undefined>,
++	): Markdown {
++		const derived = new Markdown(document)
++		const visited = new Set<MarkdownNode>()
++		for (const node of walkNodes(document)) {
++			visited.clear()
++			let source: MarkdownNode | undefined = node
++			while (source !== undefined && !visited.has(source)) {
++				visited.add(source)
++				const span = this.#spans.get(source)
++				if (span !== undefined) {
++					derived.#spans.set(node, span)
++					break
++				}
++				source = derivations.get(source)
++			}
++		}
++		return derived
++	}
+ }
+diff --git a/tests/src/core/Markdown.test.ts b/tests/src/core/Markdown.test.ts
+index 5714d72..83fc7ed 100644
+--- a/tests/src/core/Markdown.test.ts
++++ b/tests/src/core/Markdown.test.ts
+@@ -5,6 +5,7 @@ import type {
+ 	MarkdownHandlers,
+ 	MarkdownNode,
+ 	ParagraphNode,
++	TextNode,
+ } from '@src/core'
+ import { describe, expect, it } from 'vitest'
+ import { collectStream } from '@orkestrel/test'
+@@ -49,6 +50,60 @@ describe('Markdown — document getter', () => {
+ 	})
+ })
+ 
++describe('Markdown — span', () => {
++	it('reports the region of the original input each parsed node came from', () => {
++		const source = '# Title\n\npara'
++		const markdown = new Markdown(source)
++		const heading = markdown.find(isHeadingNode)
++		if (heading === undefined) throw new Error('expected a heading')
++		const span = markdown.span(heading)
++		if (span === undefined) throw new Error('expected heading provenance')
++		expect(source.slice(span.start, span.end)).toBe('# Title')
++		expect(markdown.span(markdown.document)).toEqual({ start: 0, end: source.length })
++	})
++
++	it('returns a fresh value per call, so a mutated return never reaches the next', () => {
++		const markdown = new Markdown('# Title')
++		const first = markdown.span(markdown.document)
++		const second = markdown.span(markdown.document)
++		if (first === undefined || second === undefined) throw new Error('expected provenance')
++		expect(first).not.toBe(second)
++		expect(first).toEqual(second)
++		Object.assign(first, { start: 999 })
++		expect(markdown.span(markdown.document)).toEqual({ start: 0, end: 7 })
++	})
++
++	it('reports undefined for a foreign node and for every node of an adopted document', () => {
++		const markdown = new Markdown('# Title')
++		const foreign = new Markdown('# Other')
++		expect(markdown.span(foreign.document)).toBeUndefined()
++		const document: MarkdownDocument = {
++			element: 'document',
++			children: [{ element: 'paragraph', children: [{ element: 'text', value: 'x' }] }],
++		}
++		const adopted = new Markdown(document)
++		expect([...adopted.walk()].map((node) => adopted.span(node))).toEqual([
++			undefined,
++			undefined,
++			undefined,
++		])
++	})
++
++	it('keeps two handles over the same text on independent maps', () => {
++		const source = '# Title'
++		const first = new Markdown(source)
++		const second = new Markdown(source)
++		const firstHeading = first.find(isHeadingNode)
++		const secondHeading = second.find(isHeadingNode)
++		if (firstHeading === undefined || secondHeading === undefined)
++			throw new Error('expected a heading in each handle')
++		expect(firstHeading).not.toBe(secondHeading)
++		expect(first.span(secondHeading)).toBeUndefined()
++		expect(second.span(firstHeading)).toBeUndefined()
++		expect(first.span(firstHeading)).toEqual(second.span(secondHeading))
++	})
++})
++
+ describe('Markdown — find', () => {
+ 	it('narrows via a type guard overload', () => {
+ 		const markdown = new Markdown('# Title')
+@@ -110,11 +165,11 @@ describe('Markdown — map', () => {
+ 		return isTextNode(node) ? { element: 'text', value: node.value.toUpperCase() } : node
+ 	}
+ 
+-	it('an identity rewrite returns a NEW Markdown instance with a deep-equal document', () => {
++	it('an identity rewrite returns a NEW Markdown instance reusing the document tree', () => {
+ 		const markdown = new Markdown('# Title\n\npara')
+ 		const rewritten = markdown.map((node) => node)
+ 		expect(rewritten).not.toBe(markdown)
+-		expect(rewritten.document).toEqual(markdown.document)
++		expect(rewritten.document).toBe(markdown.document)
+ 	})
+ 
+ 	it('never mutates the original instance (copy-on-write)', () => {
+@@ -161,6 +216,53 @@ describe('Markdown — map', () => {
+ 	})
+ })
+ 
++describe('Markdown — map provenance', () => {
++	it('carries every region through an identity rewrite', () => {
++		const markdown = new Markdown('# Title\n\npara')
++		const rewritten = markdown.map((node) => node)
++		expect([...rewritten.walk()].map((node) => rewritten.span(node))).toEqual(
++			[...markdown.walk()].map((node) => markdown.span(node)),
++		)
++	})
++
++	it('gives a one-source replacement its source region and a rebuilt ancestor its original one', () => {
++		const markdown = new Markdown('# Title\n\npara')
++		const rewritten = markdown.map((node) =>
++			isTextNode(node) && node.value === 'para' ? { element: 'text', value: 'PARA' } : node,
++		)
++		const replaced = rewritten.find((node) => isTextNode(node) && node.value === 'PARA')
++		if (replaced === undefined) throw new Error('expected the replacement text node')
++		expect(rewritten.span(replaced)).toEqual({ start: 9, end: 13 })
++		expect(rewritten.span(rewritten.document)).toEqual({ start: 0, end: 13 })
++		const heading = rewritten.find(isHeadingNode)
++		if (heading === undefined) throw new Error('expected the untouched heading')
++		expect(rewritten.span(heading)).toEqual({ start: 0, end: 7 })
++	})
++
++	it('leaves an output node assembled from separate sources without a region', () => {
++		const shared: TextNode = { element: 'text', value: 'z' }
++		const markdown = new Markdown('one\n\ntwo')
++		const merged = markdown.map((node) => (isTextNode(node) ? shared : node))
++		expect(merged.filter(isTextNode)).toEqual([shared, shared])
++		expect(merged.span(shared)).toBeUndefined()
++	})
++
++	it('resolves a moved original to its own region and its replacement to the region it vacated', () => {
++		const markdown = new Markdown('# Title\n\npara')
++		const [headingText, bodyText] = markdown.filter(isTextNode)
++		if (headingText === undefined || bodyText === undefined)
++			throw new Error('expected two text nodes')
++		expect(markdown.span(headingText)).toEqual({ start: 2, end: 7 })
++		expect(markdown.span(bodyText)).toEqual({ start: 9, end: 13 })
++		const replacement: TextNode = { element: 'text', value: 'REPLACED' }
++		const swapped = markdown.map((node) =>
++			node === headingText ? replacement : node === bodyText ? headingText : node,
++		)
++		expect(swapped.span(replacement)).toEqual({ start: 2, end: 7 })
++		expect(swapped.span(headingText)).toEqual({ start: 2, end: 7 })
++	})
++})
++
+ describe('Markdown — reduce', () => {
+ 	it('the node count matches the walk() spread length', () => {
+ 		const markdown = new Markdown('# Title\n\npara with **bold** text')
