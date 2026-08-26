@@ -64,6 +64,23 @@ Each accepted `start()` call opens a generation, and an implementation emits `ch
 `exit` it receives, so an implementation whose peer can outlive its own `close()` owns that
 obligation.
 
+Drive that seam directly to carry one frame without a client:
+
+```ts
+import type { JSONRPCNotification, LSPTransportInterface } from '@orkestrel/lsp'
+import { encodeLSPMessage } from '@orkestrel/lsp'
+
+declare const transport: LSPTransportInterface
+
+const notification: JSONRPCNotification = { jsonrpc: '2.0', method: 'exit' }
+
+await transport.start()
+const accepted = await transport.send(encodeLSPMessage(notification))
+await transport.close()
+```
+
+`accepted` holds what `send()` reported for those bytes.
+
 The client also defends against a foreign transport that throws synchronously. It converts a send
 fault into a coded `LSPError`, bounds exit and close settlement by the `timeout` option, and removes
 transport listeners during teardown. A close failure that settles before that deadline is emitted
@@ -129,6 +146,76 @@ frames. Retained byte segments are owned copies, so caller mutation after parsin
 later continuation. The parser accepts unknown header fields and refuses malformed parameters in a
 known `Content-Type` field. Use `encodeLSPMessage()` to produce a byte-accurate frame.
 
+## Validation
+
+Every payload this package reads off the wire arrives as `unknown`, so each guard narrows one
+shape and returns `false` for anything else. Narrow a decoded frame by its JSON-RPC role:
+
+```ts
+import {
+	isJSONRPCError,
+	isJSONRPCNotification,
+	isJSONRPCRequest,
+	isJSONRPCResponse,
+} from '@orkestrel/lsp'
+
+declare const message: unknown
+declare const payload: unknown
+
+const method =
+	isJSONRPCRequest(message) || isJSONRPCNotification(message) ? message.method : undefined
+const id = isJSONRPCResponse(message) ? message.id : undefined
+const code = isJSONRPCError(payload) ? payload.code : undefined
+```
+
+Narrow a document payload by the shape it claims:
+
+```ts
+import {
+	isLSPCodeDescription,
+	isLSPDiagnostic,
+	isLSPDiagnosticRelated,
+	isLSPDocumentDiagnosticReport,
+	isLSPLocation,
+	isLSPPosition,
+	isLSPPublishDiagnosticsParams,
+	isLSPRange,
+} from '@orkestrel/lsp'
+
+declare const value: unknown
+
+const line = isLSPPosition(value) ? value.line : undefined
+const start = isLSPRange(value) ? value.start : undefined
+const uri = isLSPLocation(value) ? value.uri : undefined
+const href = isLSPCodeDescription(value) ? value.href : undefined
+const related = isLSPDiagnosticRelated(value) ? value.location : undefined
+const text = isLSPDiagnostic(value) ? value.message : undefined
+const published = isLSPPublishDiagnosticsParams(value) ? value.diagnostics : undefined
+const report = isLSPDocumentDiagnosticReport(value) ? value.kind : undefined
+```
+
+Narrow a handshake payload the same way. A server capability record is open, so read each
+negotiated feature through the guard that owns it:
+
+```ts
+import {
+	isLSPDiagnosticOptions,
+	isLSPIdentity,
+	isLSPInitializeResult,
+	isLSPServerCapabilities,
+	isLSPTextDocumentSyncOptions,
+} from '@orkestrel/lsp'
+
+declare const result: unknown
+declare const capability: unknown
+
+const capabilities = isLSPInitializeResult(result) ? result.capabilities : undefined
+const peer = isLSPIdentity(capability) ? capability.name : undefined
+const encoding = isLSPServerCapabilities(capability) ? capability.positionEncoding : undefined
+const change = isLSPTextDocumentSyncOptions(capability) ? capability.change : undefined
+const workspace = isLSPDiagnosticOptions(capability) ? capability.workspaceDiagnostics : undefined
+```
+
 ## Conformance
 
 This package tracks Language Server Protocol 3.18. The mirror at `tests/mirrors/metaModel.json`
@@ -141,7 +228,7 @@ form matching the client's advertised capability.
 
 ## Methods
 
-### `LSPClientInterface`
+#### `LSPClientInterface`
 
 The client interface exposes these behavioral methods:
 
@@ -152,7 +239,7 @@ The client interface exposes these behavioral methods:
 | `close`   | `close(uri: LSPDocumentURI): Promise<void>`                                                       | Notifies the peer that an owned document closed.                                         |
 | `destroy` | `destroy(): Promise<void>`                                                                        | Drains work, performs bounded protocol and transport teardown, and destroys the emitter. |
 
-### `LSPTransportInterface`
+#### `LSPTransportInterface`
 
 The transport interface exposes these behavioral methods:
 
@@ -166,118 +253,118 @@ The transport interface exposes these behavioral methods:
 
 The server surface provides these exports:
 
-| Export                  | Purpose                                                                   |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `StdioTransport`        | Implements the byte transport over a language server child process.       |
-| `createStdioTransport`  | Creates an `LSPTransportInterface` from `StdioTransportOptions`.          |
-| `StdioTransportOptions` | Configures the child's command, directory, environment, and grace window. |
+| Export                  | Kind      | Purpose                                                                   |
+| ----------------------- | --------- | ------------------------------------------------------------------------- |
+| `StdioTransport`        | class     | Implements the byte transport over a language server child process.       |
+| `createStdioTransport`  | function  | Creates an `LSPTransportInterface` from `StdioTransportOptions`.          |
+| `StdioTransportOptions` | interface | Configures the child's command, directory, environment, and grace window. |
 
 The client surface provides these entities and configuration contracts:
 
-| Export                  | Purpose                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `LSPClient`             | Implements the document-oriented client.                                                          |
-| `createLSPClient`       | Creates an `LSPClientInterface` from `LSPClientOptions`.                                          |
-| `LSPClientInterface`    | Defines the readonly `emitter`, `capabilities`, and `encoding` properties and the client methods. |
-| `LSPClientOptions`      | Configures transport, workspace, lifecycle timeout, client abort, and event hooks.                |
-| `LSPOpenOptions`        | Configures a document inspection with the signal that bounds its diagnostics wait.                |
-| `LSPClientEventMap`     | Maps client notifications, exits, and errors to listener arguments.                               |
-| `LSPClientLifecycle`    | Describes lifecycle ownership and transport generations.                                          |
-| `LSPClientCapabilities` | Describes the capabilities advertised during initialization.                                      |
-| `LSPTransportInterface` | Defines the readonly `emitter` property and the byte transport methods.                           |
-| `LSPTransportEventMap`  | Maps byte chunks, exits, and errors to transport listeners.                                       |
+| Export                  | Kind      | Purpose                                                                                           |
+| ----------------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| `LSPClient`             | class     | Implements the document-oriented client.                                                          |
+| `createLSPClient`       | function  | Creates an `LSPClientInterface` from `LSPClientOptions`.                                          |
+| `LSPClientInterface`    | interface | Defines the readonly `emitter`, `capabilities`, and `encoding` properties and the client methods. |
+| `LSPClientOptions`      | interface | Configures transport, workspace, lifecycle timeout, client abort, and event hooks.                |
+| `LSPOpenOptions`        | interface | Configures a document inspection with the signal that bounds its diagnostics wait.                |
+| `LSPClientEventMap`     | type      | Maps client notifications, exits, and errors to listener arguments.                               |
+| `LSPClientLifecycle`    | type      | Describes lifecycle ownership and transport generations.                                          |
+| `LSPClientCapabilities` | interface | Describes the capabilities advertised during initialization.                                      |
+| `LSPTransportInterface` | interface | Defines the readonly `emitter` property and the byte transport methods.                           |
+| `LSPTransportEventMap`  | type      | Maps byte chunks, exits, and errors to transport listeners.                                       |
 
 The framing and error surface provides these exports:
 
-| Export             | Purpose                                                       |
-| ------------------ | ------------------------------------------------------------- |
-| `encodeLSPMessage` | Encodes a JSON-RPC message into an LSP frame.                 |
-| `parseLSPMessages` | Decodes complete messages and returns retained framing state. |
-| `LSPDecodeState`   | Describes retained incremental framing bytes.                 |
-| `LSPError`         | Reports a package failure with a stable code.                 |
-| `isLSPError`       | Checks for a branded package error.                           |
-| `LSPErrorCode`     | Lists stable package error codes.                             |
-| `LSPErrorContext`  | Describes structured error details.                           |
-| `LSPErrorOptions`  | Configures a package error.                                   |
+| Export             | Kind      | Purpose                                                       |
+| ------------------ | --------- | ------------------------------------------------------------- |
+| `encodeLSPMessage` | function  | Encodes a JSON-RPC message into an LSP frame.                 |
+| `parseLSPMessages` | function  | Decodes complete messages and returns retained framing state. |
+| `LSPDecodeState`   | type      | Describes retained incremental framing bytes.                 |
+| `LSPError`         | class     | Reports a package failure with a stable code.                 |
+| `isLSPError`       | function  | Checks for a branded package error.                           |
+| `LSPErrorCode`     | type      | Lists stable package error codes.                             |
+| `LSPErrorContext`  | interface | Describes structured error details.                           |
+| `LSPErrorOptions`  | interface | Configures a package error.                                   |
 
 The JSON-RPC and initialization surface provides these payload types:
 
-| Export                  | Purpose                                       |
-| ----------------------- | --------------------------------------------- |
-| `JSONRPCId`             | Identifies a request and response pair.       |
-| `JSONRPCRequest`        | Describes a request message.                  |
-| `JSONRPCNotification`   | Describes a notification message.             |
-| `JSONRPCError`          | Describes an error payload.                   |
-| `JSONRPCResultResponse` | Describes a successful response.              |
-| `JSONRPCErrorResponse`  | Describes a failed response.                  |
-| `JSONRPCResponse`       | Describes either response outcome.            |
-| `JSONRPCMessage`        | Describes any supported wire message.         |
-| `LSPIdentity`           | Describes a protocol peer.                    |
-| `LSPInitializeParams`   | Describes the client initialize payload.      |
-| `LSPInitializeResult`   | Describes a successful initialize result.     |
-| `LSPServerCapabilities` | Describes server capabilities and extensions. |
-| `LSPExit`               | Describes how a transport process ended.      |
+| Export                  | Kind      | Purpose                                       |
+| ----------------------- | --------- | --------------------------------------------- |
+| `JSONRPCId`             | type      | Identifies a request and response pair.       |
+| `JSONRPCRequest`        | interface | Describes a request message.                  |
+| `JSONRPCNotification`   | interface | Describes a notification message.             |
+| `JSONRPCError`          | interface | Describes an error payload.                   |
+| `JSONRPCResultResponse` | interface | Describes a successful response.              |
+| `JSONRPCErrorResponse`  | interface | Describes a failed response.                  |
+| `JSONRPCResponse`       | type      | Describes either response outcome.            |
+| `JSONRPCMessage`        | type      | Describes any supported wire message.         |
+| `LSPIdentity`           | interface | Describes a protocol peer.                    |
+| `LSPInitializeParams`   | interface | Describes the client initialize payload.      |
+| `LSPInitializeResult`   | interface | Describes a successful initialize result.     |
+| `LSPServerCapabilities` | interface | Describes server capabilities and extensions. |
+| `LSPExit`               | interface | Describes how a transport process ended.      |
 
 The document and diagnostic surface provides these payload types:
 
-| Export                        | Purpose                                          |
-| ----------------------------- | ------------------------------------------------ |
-| `LSPDocumentURI`              | Identifies a document.                           |
-| `LSPPosition`                 | Describes a zero-based document position.        |
-| `LSPRange`                    | Describes a half-open document span.             |
-| `LSPLocation`                 | Pairs a document URI with a range.               |
-| `LSPTextDocumentIdentifier`   | Identifies a text document payload.              |
-| `LSPTextDocumentItem`         | Describes an opened document and its text.       |
-| `LSPDiagnosticSeverity`       | Identifies a diagnostic severity.                |
-| `LSPDiagnosticTag`            | Identifies a diagnostic tag.                     |
-| `LSPCodeDescription`          | Links a diagnostic code to its description.      |
-| `LSPDiagnosticRelated`        | Describes related diagnostic information.        |
-| `LSPDiagnostic`               | Describes a diagnostic.                          |
-| `LSPPublishDiagnosticsParams` | Describes pushed diagnostics.                    |
-| `LSPDocumentDiagnosticParams` | Describes a pull-diagnostic request.             |
-| `LSPDocumentDiagnosticReport` | Describes a full or unchanged diagnostic report. |
-| `LSPPositionEncoding`         | Identifies a negotiated position encoding.       |
-| `LSPTextDocumentSyncKind`     | Identifies a text synchronization mode.          |
-| `LSPTextDocumentSyncOptions`  | Describes expanded synchronization options.      |
-| `LSPTextDocumentSync`         | Describes compact or expanded synchronization.   |
-| `LSPDiagnosticOptions`        | Describes a server diagnostic provider.          |
+| Export                        | Kind      | Purpose                                          |
+| ----------------------------- | --------- | ------------------------------------------------ |
+| `LSPDocumentURI`              | type      | Identifies a document.                           |
+| `LSPPosition`                 | interface | Describes a zero-based document position.        |
+| `LSPRange`                    | interface | Describes a half-open document span.             |
+| `LSPLocation`                 | interface | Pairs a document URI with a range.               |
+| `LSPTextDocumentIdentifier`   | interface | Identifies a text document payload.              |
+| `LSPTextDocumentItem`         | interface | Describes an opened document and its text.       |
+| `LSPDiagnosticSeverity`       | type      | Identifies a diagnostic severity.                |
+| `LSPDiagnosticTag`            | type      | Identifies a diagnostic tag.                     |
+| `LSPCodeDescription`          | interface | Links a diagnostic code to its description.      |
+| `LSPDiagnosticRelated`        | interface | Describes related diagnostic information.        |
+| `LSPDiagnostic`               | interface | Describes a diagnostic.                          |
+| `LSPPublishDiagnosticsParams` | interface | Describes pushed diagnostics.                    |
+| `LSPDocumentDiagnosticParams` | interface | Describes a pull-diagnostic request.             |
+| `LSPDocumentDiagnosticReport` | type      | Describes a full or unchanged diagnostic report. |
+| `LSPPositionEncoding`         | type      | Identifies a negotiated position encoding.       |
+| `LSPTextDocumentSyncKind`     | type      | Identifies a text synchronization mode.          |
+| `LSPTextDocumentSyncOptions`  | interface | Describes expanded synchronization options.      |
+| `LSPTextDocumentSync`         | type      | Describes compact or expanded synchronization.   |
+| `LSPDiagnosticOptions`        | interface | Describes a server diagnostic provider.          |
 
 The validation surface provides these guards:
 
-| Export                          | Purpose                                  |
-| ------------------------------- | ---------------------------------------- |
-| `isJSONRPCError`                | Checks an error payload.                 |
-| `isJSONRPCRequest`              | Checks a request message.                |
-| `isJSONRPCNotification`         | Checks a notification message.           |
-| `isJSONRPCResponse`             | Checks a response message.               |
-| `isLSPPosition`                 | Checks a document position.              |
-| `isLSPRange`                    | Checks a document range.                 |
-| `isLSPLocation`                 | Checks a location.                       |
-| `isLSPCodeDescription`          | Checks a diagnostic code description.    |
-| `isLSPDiagnosticRelated`        | Checks related diagnostic information.   |
-| `isLSPDiagnostic`               | Checks a diagnostic.                     |
-| `isLSPPublishDiagnosticsParams` | Checks pushed diagnostic parameters.     |
-| `isLSPDocumentDiagnosticReport` | Checks a diagnostic report.              |
-| `isLSPIdentity`                 | Checks a peer identity.                  |
-| `isLSPTextDocumentSyncOptions`  | Checks expanded synchronization options. |
-| `isLSPDiagnosticOptions`        | Checks diagnostic provider options.      |
-| `isLSPServerCapabilities`       | Checks server capabilities.              |
-| `isLSPInitializeResult`         | Checks an initialize result.             |
+| Export                          | Kind     | Purpose                                  |
+| ------------------------------- | -------- | ---------------------------------------- |
+| `isJSONRPCError`                | function | Checks an error payload.                 |
+| `isJSONRPCRequest`              | function | Checks a request message.                |
+| `isJSONRPCNotification`         | function | Checks a notification message.           |
+| `isJSONRPCResponse`             | function | Checks a response message.               |
+| `isLSPPosition`                 | function | Checks a document position.              |
+| `isLSPRange`                    | function | Checks a document range.                 |
+| `isLSPLocation`                 | function | Checks a location.                       |
+| `isLSPCodeDescription`          | function | Checks a diagnostic code description.    |
+| `isLSPDiagnosticRelated`        | function | Checks related diagnostic information.   |
+| `isLSPDiagnostic`               | function | Checks a diagnostic.                     |
+| `isLSPPublishDiagnosticsParams` | function | Checks pushed diagnostic parameters.     |
+| `isLSPDocumentDiagnosticReport` | function | Checks a diagnostic report.              |
+| `isLSPIdentity`                 | function | Checks a peer identity.                  |
+| `isLSPTextDocumentSyncOptions`  | function | Checks expanded synchronization options. |
+| `isLSPDiagnosticOptions`        | function | Checks diagnostic provider options.      |
+| `isLSPServerCapabilities`       | function | Checks server capabilities.              |
+| `isLSPInitializeResult`         | function | Checks an initialize result.             |
 
 The constant surface provides these protocol names and limits:
 
-| Export                     | Purpose                                                       |
-| -------------------------- | ------------------------------------------------------------- |
-| `LSP_METHODS`              | Names the protocol methods that the client sends or consumes. |
-| `LSP_ENCODINGS`            | Lists protocol position encodings.                            |
-| `JSONRPC_PARSE_ERROR`      | Identifies a malformed JSON payload.                          |
-| `JSONRPC_INVALID_REQUEST`  | Identifies a structurally invalid request.                    |
-| `JSONRPC_METHOD_NOT_FOUND` | Identifies an unsupported method.                             |
-| `JSONRPC_INVALID_PARAMS`   | Identifies invalid method parameters.                         |
-| `JSONRPC_INTERNAL_ERROR`   | Identifies a receiver failure.                                |
-| `LSP_REQUEST_CANCELLED`    | Identifies a client-cancelled request.                        |
-| `LSP_CONTENT_MODIFIED`     | Identifies a request invalidated by content changes.          |
-| `LSP_SERVER_CANCELLED`     | Identifies a server-cancelled request.                        |
-| `LSP_REQUEST_FAILED`       | Identifies a request that could not complete.                 |
-| `LSP_CONTENT_LIMIT`        | Bounds an accepted content body.                              |
-| `LSP_HEADER_LIMIT`         | Bounds an accepted framing header.                            |
+| Export                     | Kind  | Purpose                                                       |
+| -------------------------- | ----- | ------------------------------------------------------------- |
+| `LSP_METHODS`              | const | Names the protocol methods that the client sends or consumes. |
+| `LSP_ENCODINGS`            | const | Lists protocol position encodings.                            |
+| `JSONRPC_PARSE_ERROR`      | const | Identifies a malformed JSON payload.                          |
+| `JSONRPC_INVALID_REQUEST`  | const | Identifies a structurally invalid request.                    |
+| `JSONRPC_METHOD_NOT_FOUND` | const | Identifies an unsupported method.                             |
+| `JSONRPC_INVALID_PARAMS`   | const | Identifies invalid method parameters.                         |
+| `JSONRPC_INTERNAL_ERROR`   | const | Identifies a receiver failure.                                |
+| `LSP_REQUEST_CANCELLED`    | const | Identifies a client-cancelled request.                        |
+| `LSP_CONTENT_MODIFIED`     | const | Identifies a request invalidated by content changes.          |
+| `LSP_SERVER_CANCELLED`     | const | Identifies a server-cancelled request.                        |
+| `LSP_REQUEST_FAILED`       | const | Identifies a request that could not complete.                 |
+| `LSP_CONTENT_LIMIT`        | const | Bounds an accepted content body.                              |
+| `LSP_HEADER_LIMIT`         | const | Bounds an accepted framing header.                            |

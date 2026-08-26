@@ -226,3 +226,38 @@ plan's M6 entry):
   proposal is refused: the decorator and the adapter are named for the era they bridge
   in, the server and client sides share the term, and renaming a family the user reads
   as settled buys coherence the current names already have.
+
+## The user's deprecation ruling, 2026-08-26
+
+The user ruled mid-flight, before the m5-deprecated unit committed: **no deprecation of
+our surfaces exists in this greenfield fleet** — no `@deprecated` tag, no backwards
+compatibility, no aliasing, no wrappers. The mcp package serves the vendor's legacy
+protocol revisions, and that is the vendor's legacy, never ours; our own surfaces move
+through breaking changes cleanly.
+
+Application:
+
+- The m5-deprecated unit's uncommitted edits (the tags on
+  `MCPClientCapabilities.roots`, `MCPClientCapabilities.sampling`, and
+  `MCPServerCapabilities.logging`, and the matching guide-row notes) are discarded from
+  the working tree on the user's instruction; the mcp head stays `11c879c`. The unit's
+  brief and report are retained as campaign history with this superseding record.
+- M5 closes as: the producer, registration, and receipt-parsing halves retained on the
+  Grok sweep's evidence (`mcp/m5-sweep-distillate.md`), and the marker half
+  **intentionally excluded by the user's ruling**. Prose that states the vendor
+  protocol's own era facts — which the tree already carries — stays; it describes the
+  vendor's deprecation, not ours.
+- A fleet sweep after the discard reads zero `@deprecated` hits across every repository's
+  `src/` and `app/` trees (word-boundary grep, all eleven repos, 2026-08-26), so the
+  ruling is the fleet's measured state, not an aspiration.
+- M6 dispatches from `11c879c`. Its brief already forbids compatibility aliases,
+  re-exports, and shims, which the ruling reaffirms.
+
+**Sharpened by the user in the same window:** a thing of ours that would earn a
+deprecation marker is instead culled — deleted with every affected consumer corrected
+down the line in the same change. Applied: the fleet carries nothing marked deprecated
+(the zero-hit sweep), so nothing awaits culling; the mcp capability members the M5 row
+examined (`roots`, `sampling`, `logging`) model the vendor's wire shapes for the legacy
+revisions this package deliberately serves — the special case the user named — so they
+stay as live vendor-legacy surface, not as our deprecated work. M5's closure is unchanged
+under the sharpened ruling.
