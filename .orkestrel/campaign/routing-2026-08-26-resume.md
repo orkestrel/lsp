@@ -171,3 +171,58 @@ insurance section:
 | `m4.1-repairs` | `implementer` | Opus 5 (native) | In flight from `c2a35d4`, carrying the round reconciliation's finding list. Auditor on return: `checker` plus the Orchestrator's gate re-run. |
 | `h2.3.2-prose` | `implementer` | Opus 5 (native) | Landed at markdown `c6b48f6`; Orchestrator re-ran check, `src:core`, and guides green. The unit surfaced the pre-existing `guides/markdown.md` oxfmt red (the Methods table), carried by `h2.4-mechanical`. Dispatch slip recorded: the brief's named review-verdict file landed on disk moments after the dispatch, so the unit correctly proceeded on the brief's self-contained restatements. |
 | `h2.4-mechanical` | `builder` | Sonnet (native) | In flight from `c6b48f6`: the R6 derivation and rename, the R5 scan-leaf TSDoc, and the format re-pad. Auditor on return: `checker`. |
+
+## The user's finish-line rulings, 2026-08-26
+
+The user ruled at the M4 and H2 fix-unit boundary:
+
+- **Sol is abandoned for this session.** No further probe, no login ladder. Grok takes
+  the objective lanes in Sol's place and keeps absorption and distillation; Opus holds
+  design, implementation, and review; the Orchestrator holds final say and acceptance.
+  The corrected confidence weighting stands: Opus and source readings carry the higher
+  prior over any Grok verdict.
+- **Branch verification, taken with a status sweep over the eleven repos**: lsp on
+  `main` at `f9c0137`; scaffold, workflow, process, tool, queue, mcp, middleware,
+  markdown, html, and probe on `claude/lsp-spec-audit-est33d` — the state the ROADMAP
+  names and the user expected.
+- **The M6 blessing resolves.** The user believed the renames had landed on the branch
+  and delegated the final ruling. Verification: the era sweep (mcp `f1632ad`) did land
+  name changes — `MCP_MODERN_VERSION`, `MCPModernVersion`,
+  `SUPPORTED_LEGACY_PROTOCOL_VERSIONS`, `SUPPORTED_CLIENT_PROTOCOL_VERSIONS` — which
+  matches the user's memory; the M6 rename set itself has not landed
+  (`SUPPORTED_PROTOCOL_VERSIONS`, `MCP_PROTOCOL_VERSION`, `MCP_LEGACY_VERSION`, and the
+  `MCPLegacy` family are unchanged in the tree). The Orchestrator's ruling on each M6
+  subject, exercising the delegated final say, is recorded in the M6 brief and lands
+  with the M6 unit.
+- **P3 closes as intentionally excluded.** The plan struck the TypeScript 7 receipt
+  gate on 2026-08-25 and the user's ruling keeps TypeScript 7 out of this campaign
+  entirely: `@typescript/native-preview` is approved for a conformance reading only,
+  never for runtime, and only in a later session after the lsp package reaches the
+  user's bar. The approval is recorded here as a standing permission for that session;
+  no unit runs in this campaign. The struck row's obligation — the probe guide records
+  the receipt gate as the reopening trigger — landed with the P-wave guide work.
+
+## The M6 ruling, taken under the delegated final say
+
+Subjects, from the plan's design round and the accrued audit findings
+(`mcp/m-audit-reviewer-verdict.md` 8b; `mcp/m7-chain-audit-reviewer-verdict.md` F3; the
+plan's M6 entry):
+
+- `SUPPORTED_PROTOCOL_VERSIONS` renames to `SUPPORTED_MODERN_PROTOCOL_VERSIONS`. The 8b
+  finding: the unqualified member of an era-qualified trio reads as the superset it no
+  longer is. The qualifier is the fix, and the spelling mirrors its landed sibling
+  `SUPPORTED_LEGACY_PROTOCOL_VERSIONS`.
+- `SUPPORTED_CLIENT_PROTOCOL_VERSIONS` renames to `SUPPORTED_MCP_VERSIONS`, the F3
+  reviewer's proposal: the constant guards the `MCPVersion` union beside `isMCPVersion`
+  and no client surface admits its full contents, so the name states the guard set
+  rather than a client allowlist.
+- `MCP_PROTOCOL_VERSION` renames to `MCP_HANDSHAKE_VERSION` and `MCP_LEGACY_VERSION`
+  renames to `MCP_FALLBACK_VERSION`, the plan's design-round proposals: each constant's
+  own TSDoc already states the role — the legacy handshake default and the legacy
+  fallback anchor — and the unqualified `MCP_PROTOCOL_VERSION` beside two qualified
+  siblings repeats the 8b defect shape.
+- The `MCPLegacy` family keeps its names — `MCPLegacy`, `createMCPLegacy`,
+  `MCPLegacyClientTransport`, `createMCPLegacyClientTransport`. The plan's `MCPDualEra`
+  proposal is refused: the decorator and the adapter are named for the era they bridge
+  in, the server and client sides share the term, and renaming a family the user reads
+  as settled buys coherence the current names already have.

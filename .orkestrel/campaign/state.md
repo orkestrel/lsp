@@ -28,12 +28,12 @@ known open unit, not a regression to diagnose.
 | Repository | Branch | Head | Standing |
 |---|---|---|---|
 | `orkestrel/lsp` | `main` | `3b8f019` and later | The campaign's subject and its record. L2 through L6 accepted; the campaign archive lives here under `.orkestrel/`. |
-| `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `1db0372` | **P2 ACCEPTED and pushed.** The `Issue.range` adoption landed as one commit behind the green chain, after the substituted Opus objective audit, the Orchestrator's settling measurement, and the Grok insurance corroboration (`probe/p2-audit-2-verdict.md`). The probe tree's ephemeral streams are swept. P3 stays deferred pending the user's install approval. |
+| `orkestrel/probe` | `claude/lsp-spec-audit-est33d` | `1db0372` | **P WAVE CLOSED.** P2 accepted and pushed: the `Issue.range` adoption landed as one commit behind the green chain, after the substituted Opus objective audit, the Orchestrator's settling measurement, and the Grok corroboration (`probe/p2-audit-2-verdict.md`). The probe tree's ephemeral streams are swept. P3 is intentionally excluded by the user's 2026-08-26 ruling: no TypeScript 7 work in this campaign; the `@typescript/native-preview` approval is recorded in the routing ledger as a standing conformance-only permission for a later session. |
 | `orkestrel/html` | `claude/lsp-spec-audit-est33d` | `a533947` | Accepted and pushed. Span provenance on the parse surface. |
 | `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | `c01e1a5` | Accepted and pushed. Progress reshaped to the mcp pattern with `unit` removed. |
 | `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | `c51d7ce` | Accepted and pushed. The vendored lint exclusion for the campaign archive and the bench write-root rule in the host inventory's orchestration contract, with the inventory digests regenerated. A release bump is registered for that moved vendored surface; every target re-pins and runs `repair` after it publishes. |
-| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `c2a35d4` | **AUDITED, fix unit in flight.** Every M4 unit landed and `m4-gates` read the whole chain green (`1151 passed | 1 skipped`, conformance `42`, guides `144`). The round audit ran on the substituted lanes and returned FAIL on both, reconciled in `mcp/m4-round-audit-verdict.md`; `m4.1-repairs` (Opus) is in flight carrying the finding list. See the M4 section. |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `c6b48f6` | **CHECKPOINTED, fix round closing.** Through `h2.3.2-prose`: the round-two objective audit's findings closed as executed rows at `bda6e1e`, and the subjective review's voice findings closed as prose at `c6b48f6`. `h2.4-mechanical` is in flight (R6, the R5 scan-leaf TSDoc, and the pre-existing guide oxfmt red its checkpoint message names); `h2.5-gates` and acceptance follow. See the H2 section. |
+| `orkestrel/mcp` | `claude/lsp-spec-audit-est33d` | `11c879c` | **M4 ACCEPTED** (`mcp/m4-acceptance.md`). The round audit's reconciled findings closed in `m4.1-repairs` (Opus, `11c879c`); the fix round closed on the checker's PASS over every claim (`m4.1-checker-verdict.md`) beside the Orchestrator's gate re-run (conformance `42`, guides `144`, scoped core `596`, every exit 0). M5 (deprecated surface) runs next, then M6 (naming cascade, ruled — see the routing ledger), last so mcp bumps once. |
+| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | `a02494e` | **H2 ACCEPTED** (`markdown/h2-acceptance.md`). The h2.4 review (Opus) returned PASS on every claim; its referral settled by the Orchestrator's executed equivalence instrument, and its prescribed one-line repairs landed as h2.4.1 at `a02494e`. The `h2.5-gates` chain read green at `3710f65` and `npm test` re-read green after the repairs (`602`, policy `93`, config `46`, setup `24`, guides `18`, every exit 0). |
 | `queue`, `tool`, `process`, `middleware` | `claude/lsp-spec-audit-est33d` | G1 commits | **G1 ACCEPTED.** Each guide records why its package stays untouched by the progress work, landed by parallel `builder` units, ruled PASS on every claim by the `checker` (`campaign/g1-check-verdict.md`), committed and pushed. |
 
 ## Wave status
@@ -42,9 +42,9 @@ known open unit, not a regression to diagnose.
 |---|---|---|
 | W — workflow | Progress adopted in the mcp shape, `unit` removed | Accepted and pushed |
 | L — lsp | The package: contract, codec, client, transport, conformance, the open-bound split | L2 through L5 accepted through `c1f5cea`; L6 landed as one commit `231eb37` behind its audit round, the L6.1 fix, a PASS re-check, and a green chain (conformance 243). The package is green on `main`. |
-| P — probe | Adopts `@orkestrel/lsp` | P1 closed at `42e0b1e`; **P2 accepted at `1db0372`** behind the audit, the settling measurement, the insurance corroboration, and the green chain. P3 (`@typescript/native-preview`) stays deferred pending the user's install approval, and is the P wave's only open item. |
-| H — html and markdown | Provenance | html accepted through `a533947`. markdown's fix round is through `h2.3-fences` (checkpointed at `e5876ff`); the round's objective audit runs next on the substituted Opus lane, then `h2.4-mechanical` and `h2.5-gates`. |
-| M — mcp | Era 2026-07-28 native, repairs, subscriptions, the tasks family | M3 accepted through `b50520a`. M4 is through `m4-proof` (checkpointed at `0fe1879`); `m4-guide` runs next, then `m4-gates` and the round audit. M5 (deprecated surface) and M6 (naming cascade, needs the user's blessing) follow. |
+| P — probe | Adopts `@orkestrel/lsp` | **CLOSED.** P1 at `42e0b1e`; P2 accepted at `1db0372` behind the audit, the settling measurement, the Grok corroboration, and the green chain. P3 is intentionally excluded by the user's 2026-08-26 ruling — no TypeScript 7 work this campaign; the conformance-only install approval is recorded for a later session. |
+| H — html and markdown | Provenance | **CLOSED.** html accepted through `a533947`; markdown's H2 accepted at `a02494e` behind the round's reconciled lanes, the h2.4 review's PASS, the settled referral, and the green chain (`markdown/h2-acceptance.md`). |
+| M — mcp | Era 2026-07-28 native, repairs, subscriptions, the tasks family | **M4 ACCEPTED at `11c879c`** (`mcp/m4-acceptance.md`). M5 (deprecated surface) runs next behind a Grok enumeration sweep; M6 (naming cascade) is ruled under the delegated final say — the target names are in the routing ledger — and runs last so mcp bumps once. |
 
 ## M4 — the mcp tasks wave, held and mid-implementation
 
@@ -148,6 +148,11 @@ source-level confirmation, and a Grok `CONFIRMED` on a load-bearing claim gets a
 spot-check. Opus holds the subjective lane natively. Rounds reconciled before the correction
 stand. The full application is in the routing ledger beside this file.
 
+**User ruling, finish line 2026-08-26: Sol is abandoned for this session.** No further probe
+and no login ladder runs. Grok holds the objective lanes and keeps absorption and
+distillation; Opus holds design, implementation, and review; the Orchestrator holds final say
+and acceptance. The confidence weighting in the preceding ruling stands unchanged.
+
 One Sol lane at a time through `codex exec` script files written in the session scratchpad,
 journals under `tmp/codex/` in THIS repository, one Monitor per exec filtered to milestones and
 exiting on the terminal event. **A bench design lane always gets a lane-assignment cover
@@ -164,9 +169,6 @@ ran beside each other.
 
 ## Only the user can decide
 
-- **The M6 naming blessing**: the mcp rename cascade, `SUPPORTED_CLIENT_PROTOCOL_VERSIONS` and
-  the adapter family name included.
-- **The P3 `@typescript/native-preview` install.**
 - **Publishing, at campaign end**: the user's decision and credential, run through the
   `orkestrel-publish` skill in layer order. The probe package re-pins its `file:` tarball range
   to the registry release then, and `scaffold` carries a registered bump for its vendored
@@ -186,7 +188,10 @@ project; the lsp vocabulary pass (the `isInstalledDiagnostic` annotation, the in
 default); `LSPServer`; transport-ingress backpressure (mcp); the html-spans-to-markdown inbound
 projection; the CommonMark `U+0000` replacement question; barrel membership of
 `findOpenPosition` and `projectDepth` (html); the mcp `below`/`above` file-wide sweep; the
-pre-publish observation list in `plan.md`.
+markdown vocabulary sweep (pre-existing `via` at `guides/markdown.md:158`, `:194`, `:227`,
+`:453`, `src/core/helpers.ts:2669`, `src/core/parsers.ts:193`, and the imperative TSDoc
+openers at `helpers.ts:434` and `:500`, per the h2.4 review); the pre-publish observation
+list in `plan.md`.
 
 ## Where everything lives
 
