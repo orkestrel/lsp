@@ -141,6 +141,12 @@ separate subagents, clean contexts, blind, each told its perspective — until t
 Sol access. Each substituted lane is named in the routing ledger. Re-probe at dispatch, not from
 this snapshot.
 
+**User ruling, 2026-08-26:** while Sol is dark, a Grok INSURANCE evidence sweep runs beside the
+Opus audit lane on nontrivial rounds — evidence with `file:line` pointers only, never a verdict,
+launched blind to the Opus lane. The Orchestrator reconciles with the Opus reading carrying the
+higher prior; Grok evidence alone never overturns an Opus verdict without a source-level
+confirmation. The full application is in the routing ledger beside this file.
+
 One Sol lane at a time through `codex exec` script files written in the session scratchpad,
 journals under `tmp/codex/` in THIS repository, one Monitor per exec filtered to milestones and
 exiting on the terminal event. **A bench design lane always gets a lane-assignment cover

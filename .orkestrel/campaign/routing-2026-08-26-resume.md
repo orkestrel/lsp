@@ -100,3 +100,22 @@ carried by the `h2.3-fences` brief, recorded in `state.md`'s H2 table.
 | bench liveness re-read | Orchestrator probe | — | Login completed (`tmp/codex/login-2.log`, `Successfully logged in`). `gpt-5.6-sol` refused HTTP 400 "not supported when using Codex with a ChatGPT account" on the fresh credential, thread `01a03e0d-151c-7aa2-bfe7-5a7f7db1479a`; `gpt-5.6-terra` and the CLI default both round-tripped `BENCH_LIVE` exit 0 (threads in `tmp/codex/probe-terra.jsonl`, `probe-default.jsonl`). Ruling: the Sol lanes are dark on model access, not on auth; the earlier degraded-auth reading of the 400 is falsified. |
 | lane substitution | — | Opus 5 runs every audit lane | Per `.agents/orchestration.md` § Engine assignment, Claude Code row. Recorded here; each substituted lane names it in its brief. The bench stays available for `gpt-5.6-terra`-class mechanical work and the CLI default model. |
 | `p2-audit-2` | objective audit lane | Opus 5 (native, substituted for GPT-5.6 Sol) | In flight, read-only, clean context. Brief `tmp/units/p2-audit-2-brief.md` supersedes the bench brief `probe/tmp/codex/p2-audit-brief.md`, whose exec died on the expired credential before any verdict and whose model the account cannot reach. Executed evidence supplied: the mutation instrument pair and the Orchestrator-captured held status and diff (`p2-audit-2-held-status.txt`, `-held-diff.txt`). |
+
+## User ruling, 2026-08-26: Grok insurance while Sol is dark
+
+The user directed: continue with the recorded Opus substitution for every audit lane, and
+add a Grok INSURANCE lane beside it — with lower confidence than Opus. Application:
+
+- Grok stays inside its charter: it returns distilled evidence with `file:line` pointers,
+  never verdicts. An insurance sweep is a bounded evidence question over the same audit
+  subject, launched blind to the Opus lane's answer.
+- The Orchestrator reconciles. Where Grok evidence and an Opus verdict disagree, the
+  disagreement is settled against source (a probe where one can run), and the Opus reading
+  carries the higher prior per the user's confidence ruling — Grok evidence alone never
+  overturns an Opus verdict without a source-level confirmation.
+- One Grok lane at a time on the Cursor bench; the driver verifies bench liveness at
+  dispatch and stops with a deviation report if the bench is dark.
+
+| Unit | Role | Engine | Standing |
+|---|---|---|---|
+| `p2-insurance` | `grok` insurance evidence sweep | Cursor Grok (bridge) | Dispatched over the held probe tree, blind to the `p2-audit-2` lane, per this ruling. |
