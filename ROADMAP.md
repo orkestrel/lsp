@@ -45,6 +45,16 @@ session-boundary snapshot of what is in flight.
   own properties, typed coordinates, membership derived from the core barrel, and a
   total drift formatter that reports any value without throwing.
 
+- **The guides parity project** (`eefa27a`): the fleet-standard executed-fence suite —
+  `tests/guides.test.ts` powered by `@orkestrel/guide` and `@orkestrel/test`, the guides
+  Vite project wired into the test chain, the manifest reshaped into the `## By concept`
+  table the suite reads, and the guide surface tables proved by running their fences;
+  `test:guides` read `23 passed` on 2026-08-26.
+- **The vocabulary pass** (`759b899`): the `isInstalledDiagnostic` guard declares
+  `value is Diagnostic` through the installed protocol package, and the
+  request-settlement default hoists to `LSP_TIMEOUT` in the constants file with its
+  guide row.
+
 ## Delivered to its first consumer
 
 - **The inspection bound split** (`231eb37`): the first real consumer falsified one
@@ -63,61 +73,86 @@ session-boundary snapshot of what is in flight.
   the adoption, the inspection-bound rewire, and the progress-gauge restore, accepted
   after an objective re-check returned PASS on every claim.
 
-## Where the work sits, 2026-08-26
+## Where the work sits, 2026-08-26, at the campaign's close
 
-This repository lives on `main` and carries the whole campaign record under
-`.orkestrel/`. Start a resumed session at `.orkestrel/campaign/state.md` — it is the
-pickup record, and it names every held tree, every queued unit, and every ruling a unit
-needs. The following table names the fleet repositories the campaign touches and the
-branch to pick each one up on.
+Every wave is closed and every touched checkout reads green under an independent
+verifier (`.orkestrel/campaign/fleet-verifier-2026-08-26.md`). The following table names
+each repository's final campaign state and the branch that carries it.
 
-| Repository           | Branch                         | State                                                                                                                                                                                                                                                                  |
-| -------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `orkestrel/mcp`      | `claude/lsp-spec-audit-est33d` | The tasks wave is mid-implementation. The design round is reconciled in `.orkestrel/mcp/m4-design-reconciliation.md`; the era sweep and the contract surface have landed with their falsified-row patches, and the mirror, stream, proof, and guide units are queued.  |
-| `orkestrel/markdown` | `claude/lsp-spec-audit-est33d` | The provenance round is written and its audit FAILED. `.orkestrel/markdown/h2-audit-reconciliation.md` rules the findings and cuts a four-unit fix round: the derivation-chain and boundary repairs, the contract prose, the executed fences, and the mechanical pass. |
-| `orkestrel/probe`    | `claude/lsp-spec-audit-est33d` | Accepted and pushed — the lsp adoption, the inspection-bound rewire, and the gauge restore, with this package installed as a packed tarball recorded in `.orkestrel/probe/p1-tarball-swap.sh`. `P2` (the `Issue` range) is the next unit.                              |
-| `orkestrel/html`     | `claude/lsp-spec-audit-est33d` | Accepted and pushed — span provenance on the parse surface.                                                                                                                                                                                                            |
-| `orkestrel/workflow` | `claude/lsp-spec-audit-est33d` | Accepted and pushed — progress reshaped to the mcp pattern with `unit` removed.                                                                                                                                                                                        |
-| `orkestrel/scaffold` | `claude/lsp-spec-audit-est33d` | Accepted and pushed — the vendored lint exclusion for the campaign archive. A release bump is registered for its moved vendored surface.                                                                                                                               |
+| Repository                    | Branch                         | State                                                                                                                                                                                                      |
+| ----------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orkestrel/lsp`               | `main`                         | `759b899` — the package with its guides parity project and vocabulary pass; the verifier read conformance `243 passed` on 2026-08-26.                                                                      |
+| `orkestrel/mcp`               | `claude/lsp-spec-audit-est33d` | `aa20c37` — the tasks wave (M4), the M5 closure under the no-deprecation ruling, and the M6 naming cascade, each accepted behind its audit. The moved published surface obliges a version bump at release. |
+| `orkestrel/markdown`          | `claude/lsp-spec-audit-est33d` | `a02494e` — the provenance round (H2) accepted behind its review and repairs.                                                                                                                              |
+| `orkestrel/probe`             | `claude/lsp-spec-audit-est33d` | `1db0372` — the lsp adoption (P1) and the `Issue.range` move (P2) accepted; the package re-pins its `file:` tarball range to the registry release at publish.                                              |
+| `orkestrel/html`              | `claude/lsp-spec-audit-est33d` | `a533947` — span provenance on the parse surface.                                                                                                                                                          |
+| `orkestrel/workflow`          | `claude/lsp-spec-audit-est33d` | `c01e1a5` — progress reshaped to the mcp pattern with `unit` removed.                                                                                                                                      |
+| `orkestrel/scaffold`          | `claude/lsp-spec-audit-est33d` | `c51d7ce` — the vendored lint exclusion and the bench write-root rule. The moved vendored surface obliges a scaffold release; every target re-pins and runs `repair` after it.                             |
+| `orkestrel/process`           | `claude/lsp-spec-audit-est33d` | `2a47ed1` — the G1 guide ruling and the g2 fixture guard behind its red-first and mutation-bound records.                                                                                                  |
+| `queue`, `tool`, `middleware` | `claude/lsp-spec-audit-est33d` | G1 commits — each guide records why the package stays untouched by the progress work.                                                                                                                      |
 
-## The campaign's end, and how a resumed session reaches it
+## The campaign's end
 
-The LSP audit that opened this campaign covered ten repositories. What remains before
-it closes, in the order a resumed session takes it:
+The exit criterion is met on landed evidence: every audit-report row reached
+implemented, repaired, retained, or intentionally excluded, and every touched checkout's
+gate chain reads green under an independent verifier. What remains runs on the owner's
+word:
 
-1. **Finish the mcp tasks wave (M4).** The mirror, stream, proof, guide, and gate units
-   in `.orkestrel/mcp/m4-design-reconciliation.md`, then the round's two-lane audit and
-   one commit.
-2. **Finish the markdown provenance round (H2).** The four fix units in
-   `.orkestrel/markdown/h2-audit-reconciliation.md`, each audited by an engine that did
-   not write it, then one commit.
-3. **Close the remaining mcp waves.** M5 (the deprecated surface) and M6 (the naming
-   cascade), where M6 needs the user's blessing before any rename lands.
-4. **Close the probe wave.** P2 replaces `Issue.line` with a zero-based `range`; P3
-   (the `@typescript/native-preview` conformance reading) stays deferred pending the
-   user's install approval.
-5. **Close this package's own remaining work**, listed under Next.
-6. **Release.** Publishing is the user's decision and credential, run in layer order
-   through the `orkestrel-publish` skill.
+1. **The campaign folder prune.** The retention procedure's checks run first and the
+   disposition goes to the owner; deletion happens only on the owner's explicit
+   go-ahead, and the prune commit carries the promotion record. Git history is the
+   archive.
+2. **Release.** Publishing is the user's decision and credential, in layer order through
+   the `orkestrel-publish` skill. The release carries the mcp bump for its moved
+   published surface, the scaffold bump for its moved vendored surface with every target
+   re-pinning and running `repair` after it, and the probe re-pin from the `file:`
+   tarball to the registry release.
 
 ## Next
 
-- **Guides parity project.** The workspace runs no `guides` test project, so the
-  guide's refresh procedure and surface rows are unguarded prose. Add the project and
-  its parity suite in the fleet-standard shape.
-- **Vocabulary pass.** Registered observations: the `value is unknown` annotation on
-  `isInstalledDiagnostic` narrows nothing at runtime, and the client's `30_000` default
-  sits inline rather than in the constants file.
 - **`LSPServer`.** The server half of the package, mirroring the client's contract
   style: typed handlers over the same codec and transport seam. Designed after the
   client surface settles and the first consumer's demands are known.
-- **Release.** Publishing is sequenced with the fleet's layer order and is the
-  operator's decision and credential; the probe package re-pins from the tarball to the
-  registry release when it exists.
+- **The client's internal seams.** `#cancelRequest` has one caller and
+  `#releaseGeneration` forwards to a delegate; fold or justify each in the next client
+  change.
+- **TypeScript 7 conformance.** Approved by the user on 2026-08-26 as a
+  conformance-only reading — `@typescript/native-preview` measured against the suite,
+  never adopted at runtime — in a later session, after the package is enterprise-grade.
+
+## Fleet findings carried forward
+
+Each finding names its owning package and waits for its own change. The campaign records
+them here because the campaign folder prunes and this file outlives the prune.
+
+- **scaffold** — the session-assembly duplication: a Cloud session that attaches every
+  fleet repository injects each checkout's byte-identical instruction files into the
+  model context per window. A scaffold-owned slimming decision, or attaching only the
+  repositories a session works, closes it; deleting the vendored files from targets is
+  not a fix, because `repair` restores them and the policy gates read them.
+- **scaffold** — the inert `.oxlintignore` under oxlint 1.80.0: the binary reads
+  `.eslintignore`, and the rc `ignorePatterns` carries the exclusion instead. Wire
+  `--ignore-path` or retire the file in a fleet alignment pass.
+- **fleet** — the guides-execution gap: in the packages that predate the executed-fence
+  shape, the parity drop-in resolves names but executes no fence. The drop-in's header
+  also carries a count and the word "below"; repair it upstream in the markdown
+  package's `tests/guides.test.ts` when the shape next moves.
+- **mcp** — transport-ingress backpressure.
+- **mcp** — the `below`/`above` file-wide sweep.
+- **markdown** — the vocabulary sweep: pre-existing `via` at `guides/markdown.md:158`,
+  `:194`, `:227`, `:453`, `src/core/helpers.ts:2669`, and `src/core/parsers.ts:193`,
+  and the imperative TSDoc openers at `helpers.ts:434` and `:500`, per the h2.4 review.
+- **markdown** — the CommonMark `U+0000` replacement question.
+- **markdown and html** — the reused-identity engine divergence.
+- **html** — the spans-to-markdown inbound projection, and barrel membership of
+  `findOpenPosition` and `projectDepth`.
+- **probe** — the RuntimeStage frame-basis dependence on Vitest's un-remapped stacks: a
+  Vitest change routing the stage's frames through its source-map remap flips the
+  column basis. The guard chain refuses it loudly, and the campaign's
+  `p2-settle-instrument.sh` re-produces the detecting measurement from git history
+  after the prune.
 
 ## Deliberately deferred
 
-- **`@typescript/native-preview` conformance.** Measuring the suite against the native
-  TypeScript language server awaits the operator's approval to install the package.
 - **Legacy protocol negotiation.** The client pins the protocol it implements; a
   compatibility mode for older servers is excluded by ruling, not postponed.
