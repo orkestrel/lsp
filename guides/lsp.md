@@ -132,8 +132,9 @@ await client.destroy()
 ```
 
 `grace` bounds the cooperative termination window in milliseconds, and `5000` applies when it is
-absent. `close()` closes the child's input channel, waits `grace` for the child's own ending, and
-hands a child that outlives that window to the process package session's `stop`, which signals the
+absent. `close()` closes the child's input channel, waits `grace` for that closure's flush and the
+child's own ending together on one shared deadline rather than a window for each, and hands a child
+that outlives that window to the process package session's `stop`, which signals the
 child's process group and escalates to an unconditional kill after `grace` again. The child leads
 its own process group on a POSIX host, so that signal reaches its whole tree; Windows carries no
 such group, so the host's `taskkill` utility ends the tree there instead. `close()` then waits up to

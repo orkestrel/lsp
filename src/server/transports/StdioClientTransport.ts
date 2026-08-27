@@ -163,7 +163,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 		// left.
 		await Promise.race([session.ending, cooperative])
 		if (session.code === null && session.signal === null) {
-			// The rejection below is unproven. A POSIX host cannot refuse SIGKILL, so no real child
+			// The following rejection is unproven. A POSIX host cannot refuse SIGKILL, so no real child
 			// drives a false return here: a fixture that ignores SIGTERM reports a confirmed stop at
 			// a zero window and at a graced one alike, and simulating the session would prove nothing
 			// about it. A host that can hold a process past SIGKILL closes the gap — a Windows tree

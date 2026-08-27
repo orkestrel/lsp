@@ -12,12 +12,13 @@ import type { LSPTransportInterface } from '@src/core'
  * caller mutation cannot reach the spawn.
  *
  * `grace` bounds the cooperative termination window in milliseconds. Default: `5000`. The
- * termination path is fixed: `close` closes the child's input channel and waits `grace` for the
- * child's own ending, and a child that outlives that window is handed to the process package
- * session's `stop`, which signals the child's process group and escalates to an unconditional kill
- * after `grace` again on a POSIX host, and ends the child's tree through the host's `taskkill`
- * utility on Windows. The wait for the child's stdio to close after its ending is bounded by
- * `grace` too.
+ * termination path is fixed: `close` closes the child's input channel and waits `grace` for that
+ * closure's flush and the child's own ending together, on one shared deadline rather than a window
+ * for each, so a child that stops reading its input spends the same window the ending was given. A
+ * child that outlives the window is handed to the process package session's `stop`, which signals
+ * the child's process group and escalates to an unconditional kill after `grace` again on a POSIX
+ * host, and ends the child's tree through the host's `taskkill` utility on Windows. The wait for
+ * the child's stdio to close after its ending is bounded by `grace` too.
  *
  * The transport reconnects. After `close` resolves, or after the child exits on its own and the
  * transport emits `exit`, a further `start` call spawns a fresh child. A `start` call made while a
