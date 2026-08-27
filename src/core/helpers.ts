@@ -39,3 +39,28 @@ export function encodeLSPMessage(message: JSONRPCMessage): Uint8Array {
 	frame.set(body, header.byteLength)
 	return frame
 }
+
+/**
+ * Waits for a deadline to elapse.
+ *
+ * @param ms - The number of milliseconds to wait.
+ * @returns A promise that resolves after the deadline elapses, and never rejects.
+ *
+ * @remarks
+ * The deadline is armed with `AbortSignal.timeout`, whose timer does not hold the host event loop
+ * open. A caller that wins its race against this promise therefore has nothing to clear, and the
+ * losing deadline delays no exit.
+ *
+ * @example
+ * ```ts
+ * declare const work: Promise<void>
+ *
+ * await Promise.race([work, waitForDeadline(30_000)])
+ * ```
+ */
+export function waitForDeadline(ms: number): Promise<void> {
+	const deadline = AbortSignal.timeout(ms)
+	return new Promise<void>((resolve) => {
+		deadline.addEventListener('abort', () => resolve(), { once: true })
+	})
+}

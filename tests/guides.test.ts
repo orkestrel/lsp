@@ -3,6 +3,7 @@
 // package's own, and are the only part a sibling package changes.
 
 import { describe, expect, it } from 'vitest'
+import { LSP_CAPABILITIES } from '@src/core'
 import {
 	createGuide,
 	createSource,
@@ -58,6 +59,21 @@ const sources = createSourceManager({ files, modules: MODULES })
 
 it('manifest lists at least one guide', () => {
 	expect(manifest.length).toBeGreaterThan(0)
+})
+
+// Parity proves a name resolves, never that a sentence about behavior is true. The client guide
+// claims the client advertises `utf-16` alone, so the executed assertion reads the advertisement
+// the client actually sends and the substring check guards only the sentence's presence.
+describe('advertised position encodings', () => {
+	it('advertises utf-16 alone', () => {
+		expect(LSP_CAPABILITIES.general.positionEncodings).toStrictEqual(['utf-16'])
+	})
+
+	it('states that advertisement in the client guide', () => {
+		expect(requireValue(files['guides/lsp.md'], 'Missing file: guides/lsp.md')).toContain(
+			'The client advertises `utf-16` as its only position encoding.',
+		)
+	})
 })
 
 for (const entry of manifest) {

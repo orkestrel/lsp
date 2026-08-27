@@ -10,6 +10,12 @@ and call `destroy()` when the session ends. Concurrent `start()` calls share the
 failed handshake or peer exit closes that transport generation, and a later `start()` call begins
 a fresh generation.
 
+The client advertises `utf-16` as its only position encoding. `LSP_CAPABILITIES` is that
+advertisement and the acceptance set behind it: the client sends the record as the initialize
+request's `capabilities`, and a server that selects an encoding the record does not list fails the
+handshake with an `LSPError` whose `code` property is `protocol`. A server that omits
+`positionEncoding` leaves the protocol's own default in force, and `encoding` reports `utf-16`.
+
 The client accepts `open()` and `close()` only during a ready generation. A dead generation refuses
 wire writes with an `LSPError` whose `code` property is `closed`. During teardown, the client sends
 `shutdown`, then permits only `exit` on an initialized generation that has not exited.
@@ -292,13 +298,14 @@ The client surface provides these entities and configuration contracts:
 | `LSPTransportInterface` | interface | Defines the readonly `emitter` property and the byte transport methods.                           |
 | `LSPTransportEventMap`  | type      | Maps byte chunks, exits, and errors to transport listeners.                                       |
 
-The framing and error surface provides these exports:
+The framing, timing, and error surface provides these exports:
 
 | Export             | Kind      | Purpose                                                       |
 | ------------------ | --------- | ------------------------------------------------------------- |
 | `encodeLSPMessage` | function  | Encodes a JSON-RPC message into an LSP frame.                 |
 | `parseLSPMessages` | function  | Decodes complete messages and returns retained framing state. |
 | `LSPDecodeState`   | type      | Describes retained incremental framing bytes.                 |
+| `waitForDeadline`  | function  | Waits for a deadline to elapse without holding the loop open. |
 | `LSPError`         | class     | Reports a package failure with a stable code.                 |
 | `isLSPError`       | function  | Checks for a branded package error.                           |
 | `LSPErrorCode`     | type      | Lists stable package error codes.                             |
@@ -369,12 +376,13 @@ The validation surface provides these guards:
 | `isLSPServerCapabilities`       | function | Checks server capabilities.              |
 | `isLSPInitializeResult`         | function | Checks an initialize result.             |
 
-The constant surface provides these protocol names and limits:
+The constant surface provides these protocol names, advertisements, and limits:
 
 | Export                     | Kind  | Purpose                                                       |
 | -------------------------- | ----- | ------------------------------------------------------------- |
 | `LSP_METHODS`              | const | Names the protocol methods that the client sends or consumes. |
 | `LSP_ENCODINGS`            | const | Lists protocol position encodings.                            |
+| `LSP_CAPABILITIES`         | const | Describes the capabilities the client advertises.             |
 | `LSP_TIMEOUT`              | const | Names the default request-settlement timeout in milliseconds. |
 | `JSONRPC_PARSE_ERROR`      | const | Identifies a malformed JSON payload.                          |
 | `JSONRPC_INVALID_REQUEST`  | const | Identifies a structurally invalid request.                    |

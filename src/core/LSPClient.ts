@@ -5,7 +5,6 @@ import type {
 	JSONRPCNotification,
 	JSONRPCRequest,
 	JSONRPCResponse,
-	LSPClientCapabilities,
 	LSPClientEventMap,
 	LSPClientInterface,
 	LSPClientLifecycle,
@@ -23,9 +22,14 @@ import type {
 	LSPTransportInterface,
 } from './types.js'
 import { Emitter } from '@orkestrel/emitter'
-import { JSONRPC_METHOD_NOT_FOUND, LSP_METHODS, LSP_TIMEOUT } from './constants.js'
+import {
+	JSONRPC_METHOD_NOT_FOUND,
+	LSP_CAPABILITIES,
+	LSP_METHODS,
+	LSP_TIMEOUT,
+} from './constants.js'
 import { LSPError, isLSPError } from './errors.js'
-import { encodeLSPMessage } from './helpers.js'
+import { encodeLSPMessage, waitForDeadline } from './helpers.js'
 import { parseLSPMessages } from './parsers.js'
 import {
 	isJSONRPCNotification,
@@ -240,18 +244,10 @@ export class LSPClient implements LSPClientInterface {
 		try {
 			if (!this.#ownsGeneration(generation))
 				throw new LSPError('The LSP transport is closed', { code: 'closed' })
-			const capabilities = {
-				general: { positionEncodings: ['utf-16'] },
-				textDocument: {
-					synchronization: {},
-					publishDiagnostics: {},
-					diagnostic: {},
-				},
-			} satisfies LSPClientCapabilities
 			const params = {
 				processId: null,
 				rootUri: this.#workspace,
-				capabilities,
+				capabilities: LSP_CAPABILITIES,
 			} satisfies LSPInitializeParams
 			const result = await this.#request(LSP_METHODS.initialize, params)
 			if (!isLSPInitializeResult(result))
@@ -260,7 +256,7 @@ export class LSPClient implements LSPClientInterface {
 					context: { value: result },
 				})
 			const encoding = result.capabilities.positionEncoding
-			if (encoding !== undefined && encoding !== 'utf-16')
+			if (encoding !== undefined && !LSP_CAPABILITIES.general.positionEncodings.includes(encoding))
 				throw new LSPError('The LSP server selected an unsupported position encoding', {
 					code: 'protocol',
 					context: { value: encoding },
@@ -274,7 +270,7 @@ export class LSPClient implements LSPClientInterface {
 			this.#lifecycle = { phase: 'ready', generation }
 		} catch (error) {
 			if (this.#ownsGeneration(generation)) {
-				await this.#releaseGeneration()
+				await this.#closeTransport()
 				if (this.#ownsGeneration(generation)) {
 					this.#clearSession()
 					this.#lifecycle = { phase: 'closed' }
@@ -664,26 +660,20 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	async #boundExit(): Promise<void> {
-		const deadline = AbortSignal.timeout(this.#timeout)
 		await Promise.race([
 			this.#write({ jsonrpc: '2.0', method: LSP_METHODS.exit }).catch(() => undefined),
-			new Promise<void>((resolve) =>
-				deadline.addEventListener('abort', () => resolve(), { once: true }),
-			),
+			waitForDeadline(this.#timeout),
 		])
 	}
 
 	async #closeTransport(): Promise<void> {
 		const closing = Promise.resolve().then(() => this.#transport.close())
-		const deadline = AbortSignal.timeout(this.#timeout)
 		const outcome = await Promise.race<unknown>([
 			closing.then(
 				() => false,
 				(error: unknown) => error,
 			),
-			new Promise<true>((resolve) =>
-				deadline.addEventListener('abort', () => resolve(true), { once: true }),
-			),
+			waitForDeadline(this.#timeout).then(() => true),
 		])
 		if (outcome === true)
 			this.#emitter.emit(
@@ -691,10 +681,6 @@ export class LSPClient implements LSPClientInterface {
 				new LSPError('The LSP transport close exceeded its deadline', { code: 'timeout' }),
 			)
 		else if (outcome !== false) this.#emitter.emit('error', outcome)
-	}
-
-	async #releaseGeneration(): Promise<void> {
-		await this.#closeTransport()
 	}
 
 	#ownsGeneration(generation: number): boolean {

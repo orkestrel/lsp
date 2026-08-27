@@ -1,3 +1,5 @@
+import type { LSPClientCapabilities } from './types.js'
+
 /** Names the Language Server Protocol methods this client sends or consumes. */
 export const LSP_METHODS = Object.freeze({
 	initialize: 'initialize',
@@ -13,6 +15,23 @@ export const LSP_METHODS = Object.freeze({
 
 /** Lists the position encodings named by Language Server Protocol 3.18. */
 export const LSP_ENCODINGS = Object.freeze(['utf-8', 'utf-16', 'utf-32'] as const)
+
+/**
+ * Describes the capabilities this client advertises in its initialize request.
+ *
+ * @remarks
+ * `general.positionEncodings` is both the advertisement and the acceptance set. The client sends
+ * this record as `capabilities` and refuses an initialize result whose `positionEncoding` this
+ * record does not list, so the advertised encodings and the accepted ones cannot drift apart.
+ */
+export const LSP_CAPABILITIES = Object.freeze({
+	general: Object.freeze({ positionEncodings: Object.freeze(['utf-16']) }),
+	textDocument: Object.freeze({
+		synchronization: Object.freeze({}),
+		publishDiagnostics: Object.freeze({}),
+		diagnostic: Object.freeze({}),
+	}),
+} satisfies LSPClientCapabilities)
 
 /** Names the default request-settlement timeout in milliseconds. */
 export const LSP_TIMEOUT = 30_000

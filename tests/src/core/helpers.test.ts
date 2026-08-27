@@ -1,5 +1,5 @@
 import type { JSONRPCNotification } from '@src/core'
-import { encodeLSPMessage, isLSPError, JSONRPC_INVALID_REQUEST } from '@src/core'
+import { encodeLSPMessage, isLSPError, JSONRPC_INVALID_REQUEST, waitForDeadline } from '@src/core'
 import { describe, expect, it } from 'vitest'
 
 describe('encodeLSPMessage', () => {
@@ -35,5 +35,26 @@ describe('encodeLSPMessage', () => {
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('protocol')
 		expect(thrown.context?.code).toBe(JSONRPC_INVALID_REQUEST)
+	})
+})
+
+describe('waitForDeadline', () => {
+	it('resolves no earlier than its deadline', async () => {
+		const started = performance.now()
+
+		await expect(waitForDeadline(30)).resolves.toBeUndefined()
+
+		expect(performance.now() - started).toBeGreaterThanOrEqual(20)
+	})
+
+	it('settles a shorter deadline before a longer one', async () => {
+		const order: string[] = []
+
+		await Promise.all([
+			waitForDeadline(40).then(() => order.push('long')),
+			waitForDeadline(10).then(() => order.push('short')),
+		])
+
+		expect(order).toEqual(['short', 'long'])
 	})
 })
