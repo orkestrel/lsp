@@ -1,0 +1,18 @@
+Orchestrator-produced run record, taken 2026-08-27 on the mcp main checkout at commit 854a621
+(the tree this worktree mirrors), after the M2F commit and before any later writer dispatched.
+These are executed results, not writer testimony.
+
+npm run test:src:server
+ Test Files  12 passed (12)
+      Tests  375 passed (375)
+   Duration  31.88s
+
+npm run test:src:browser
+ Test Files  4 passed (4)
+      Tests  65 passed (65)
+   Duration  5.44s
+
+npm run test:guides
+ Test Files  1 passed (1)
+      Tests  149 passed (149)
+   Duration  6.03s
