@@ -21,6 +21,12 @@ import {
 } from '@src/core'
 import { describe, expect, it } from 'vitest'
 
+// Carries range members on an instance whose prototype chain is not a plain record's.
+class WireRange {
+	readonly start = { line: 0, character: 0 }
+	readonly end = { line: 0, character: 4 }
+}
+
 describe('JSON-RPC guards', () => {
 	it('accepts each envelope arm and refuses overlapping arms', () => {
 		expect(isJSONRPCRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).toBe(true)
@@ -154,5 +160,57 @@ describe('LSP wire guards', () => {
 		expect(isLSPError(new Error('Invalid frame'))).toBe(false)
 		expect(isLSPError({ name: 'LSPError', code: 'framing' })).toBe(false)
 		expect(isLSPError(null)).toBe(false)
+	})
+})
+
+describe('LSP wire element and literal boundaries', () => {
+	const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 4 } }
+	const diagnostic = { range, message: 'Unused declaration' }
+
+	it('refuses a sparse element array and accepts its dense counterpart', () => {
+		const sparseTags: unknown[] = new Array<unknown>(3)
+		sparseTags[0] = 1
+		sparseTags[2] = 2
+		const sparseDiagnostics: unknown[] = new Array<unknown>(2)
+		sparseDiagnostics[1] = diagnostic
+
+		expect(isLSPDiagnostic({ ...diagnostic, tags: sparseTags })).toBe(false)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: [1, 2] })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: [] })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: 'error' })).toBe(false)
+		const uri = 'file:///workspace/main.ts'
+		expect(isLSPPublishDiagnosticsParams({ uri, diagnostics: sparseDiagnostics })).toBe(false)
+		expect(isLSPPublishDiagnosticsParams({ uri, diagnostics: [diagnostic] })).toBe(true)
+		expect(isLSPDocumentDiagnosticReport({ kind: 'full', items: sparseDiagnostics })).toBe(false)
+		expect(isLSPDocumentDiagnosticReport({ kind: 'full', items: [diagnostic] })).toBe(true)
+	})
+
+	it('bounds every literal member set and keeps a present undefined optional', () => {
+		expect(isLSPDiagnostic({ ...diagnostic, severity: 4 })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, severity: 5 })).toBe(false)
+		expect(isLSPDiagnostic({ ...diagnostic, severity: 0 })).toBe(false)
+		expect(isLSPDiagnostic({ ...diagnostic, severity: '1' })).toBe(false)
+		expect(isLSPDiagnostic({ ...diagnostic, severity: undefined })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: [2] })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: [3] })).toBe(false)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: [undefined] })).toBe(false)
+		expect(
+			isLSPDiagnostic({ ...diagnostic, relatedInformation: [{ message: 'Missing location' }] }),
+		).toBe(false)
+		expect(isLSPTextDocumentSyncOptions({ change: 2 })).toBe(true)
+		expect(isLSPTextDocumentSyncOptions({ change: 3 })).toBe(false)
+		expect(isLSPTextDocumentSyncOptions({ change: undefined })).toBe(true)
+		expect(isLSPServerCapabilities({ textDocumentSync: 0 })).toBe(true)
+		expect(isLSPServerCapabilities({ textDocumentSync: 3 })).toBe(false)
+		expect(isLSPServerCapabilities({ textDocumentSync: { openClose: true } })).toBe(true)
+		expect(isLSPServerCapabilities({ textDocumentSync: { change: 3 } })).toBe(false)
+		expect(isLSPServerCapabilities({ textDocumentSync: undefined })).toBe(true)
+	})
+
+	it('refuses a prototype-carrying instance and accepts an unknown extra member', () => {
+		expect(isLSPRange(new WireRange())).toBe(false)
+		expect(isLSPRange({ ...new WireRange() })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, severity: 1, extra: { fixable: true } })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, tags: [1], extra: 'unknown member' })).toBe(true)
 	})
 })

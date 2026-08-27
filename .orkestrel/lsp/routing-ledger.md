@@ -34,3 +34,8 @@
 | G4 | struck | lsp self-map | superseded: the Orchestrator read all of `src/`, `guides/lsp.md`, and the test layout first-hand; the overlap item moved into G2 v2 |
 | Design, subjective | planner (Opus 5 native) | design-brief.md verdicts | agent transcript |
 | Design, objective | Grok (bench, user substitution) | design-brief.md verdicts | `g5-objective.log` |
+| U0 | Grok (bench) | fleet-findings verification | `u0.log` |
+| U1 | implementer (Opus 5 native; Sol excluded, recorded) | validators combinator adoption | `tmp/units/u1-report.md` |
+| — | Orchestrator probe | cyclomatic-complexity readings over lsp and mcp | `complexity-probe.sh`, `complexity-probe-results.txt` |
+| D2, subjective | planner (Opus 5 native) | parser decomposition verdicts | agent transcript |
+| D2, objective | Grok (bench, user substitution) | parser decomposition verdicts | `d2-objective.log` |

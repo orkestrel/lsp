@@ -17,7 +17,18 @@ import type {
 	LSPServerCapabilities,
 	LSPTextDocumentSyncOptions,
 } from './types.js'
-import { holds, isBoolean, isInteger, isNumber, isRecord, isString } from '@orkestrel/contract'
+import {
+	arrayOf,
+	holds,
+	isBoolean,
+	isInteger,
+	isNumber,
+	isRecord,
+	isString,
+	literalOf,
+	optionalOf,
+	unionOf,
+} from '@orkestrel/contract'
 
 /**
  * Checks whether an unknown value is a JSON-RPC error payload.
@@ -159,32 +170,13 @@ export function isLSPDiagnostic(value: unknown): value is LSPDiagnostic {
 	if (!isRecord(value)) return false
 	return holds(() => {
 		if (!isLSPRange(value.range) || !isString(value.message)) return false
-		if (
-			value.severity !== undefined &&
-			value.severity !== 1 &&
-			value.severity !== 2 &&
-			value.severity !== 3 &&
-			value.severity !== 4
-		)
-			return false
+		if (!optionalOf(literalOf(1, 2, 3, 4))(value.severity)) return false
 		if (value.code !== undefined && !isNumber(value.code) && !isString(value.code)) return false
 		if (value.codeDescription !== undefined && !isLSPCodeDescription(value.codeDescription))
 			return false
 		if (value.source !== undefined && !isString(value.source)) return false
-		if (value.tags !== undefined) {
-			if (!Array.isArray(value.tags)) return false
-			for (let index = 0; index < value.tags.length; index += 1) {
-				const tag = value.tags[index]
-				if (tag !== 1 && tag !== 2) return false
-			}
-		}
-		if (value.relatedInformation !== undefined) {
-			if (!Array.isArray(value.relatedInformation)) return false
-			for (let index = 0; index < value.relatedInformation.length; index += 1) {
-				if (!isLSPDiagnosticRelated(value.relatedInformation[index])) return false
-			}
-		}
-		return true
+		if (!optionalOf(arrayOf(literalOf(1, 2)))(value.tags)) return false
+		return optionalOf(arrayOf(isLSPDiagnosticRelated))(value.relatedInformation)
 	})
 }
 
@@ -201,11 +193,7 @@ export function isLSPPublishDiagnosticsParams(
 	return holds(() => {
 		if (!isString(value.uri)) return false
 		if (value.version !== undefined && !isInteger(value.version)) return false
-		if (!Array.isArray(value.diagnostics)) return false
-		for (let index = 0; index < value.diagnostics.length; index += 1) {
-			if (!isLSPDiagnostic(value.diagnostics[index])) return false
-		}
-		return true
+		return arrayOf(isLSPDiagnostic)(value.diagnostics)
 	})
 }
 
@@ -223,11 +211,7 @@ export function isLSPDocumentDiagnosticReport(
 		if (value.kind === 'unchanged') return isString(value.resultId)
 		if (value.kind !== 'full') return false
 		if (value.resultId !== undefined && !isString(value.resultId)) return false
-		if (!Array.isArray(value.items)) return false
-		for (let index = 0; index < value.items.length; index += 1) {
-			if (!isLSPDiagnostic(value.items[index])) return false
-		}
-		return true
+		return arrayOf(isLSPDiagnostic)(value.items)
 	})
 }
 
@@ -255,10 +239,7 @@ export function isLSPTextDocumentSyncOptions(value: unknown): value is LSPTextDo
 	return holds(
 		() =>
 			(value.openClose === undefined || isBoolean(value.openClose)) &&
-			(value.change === undefined ||
-				value.change === 0 ||
-				value.change === 1 ||
-				value.change === 2),
+			optionalOf(literalOf(0, 1, 2))(value.change),
 	)
 }
 
@@ -289,11 +270,9 @@ export function isLSPServerCapabilities(value: unknown): value is LSPServerCapab
 	return holds(
 		() =>
 			(value.positionEncoding === undefined || isString(value.positionEncoding)) &&
-			(value.textDocumentSync === undefined ||
-				value.textDocumentSync === 0 ||
-				value.textDocumentSync === 1 ||
-				value.textDocumentSync === 2 ||
-				isLSPTextDocumentSyncOptions(value.textDocumentSync)) &&
+			optionalOf(unionOf(literalOf(0, 1, 2), isLSPTextDocumentSyncOptions))(
+				value.textDocumentSync,
+			) &&
 			(value.diagnosticProvider === undefined || isLSPDiagnosticOptions(value.diagnosticProvider)),
 	)
 }
