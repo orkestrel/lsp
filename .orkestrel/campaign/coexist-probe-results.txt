@@ -1,0 +1,42 @@
+{
+ "node": "v24.19.0",
+ "control": {
+  "name": "control-bytes-alone",
+  "lines": [],
+  "chunks": 3,
+  "bytes": 17
+ },
+ "both": {
+  "name": "readline-plus-data",
+  "lines": [
+   "alpha",
+   "beta",
+   "gamma"
+  ],
+  "chunks": 3,
+  "bytes": 17
+ },
+ "paused": {
+  "name": "readline-paused-gates-data",
+  "lines": [
+   "alpha",
+   "beta",
+   "gamma"
+  ],
+  "chunks": 3,
+  "bytes": 17
+ }
+}
+node:internal/readline/interface:579
+      throw new ERR_USE_AFTER_CLOSE('readline');
+      ^
+
+Error [ERR_USE_AFTER_CLOSE]: readline was closed
+    at Interface.resume (node:internal/readline/interface:579:13)
+    at Timeout._onTimeout (C:\Users\mikes\AppData\Local\Temp\claude\C--Users-mikes-WebstormProjects-lsp\8e5e604c-8a51-490a-a938-abe3f3a807f9\scratchpad\coexist-probe.cjs:33:65)
+    at listOnTimeout (node:internal/timers:635:17)
+    at process.processTimers (node:internal/timers:571:7) {
+  code: 'ERR_USE_AFTER_CLOSE'
+}
+
+Node.js v24.19.0
