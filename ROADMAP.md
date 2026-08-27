@@ -118,12 +118,14 @@ package's only consumer, the probe package's lint stage, runs warm-resident over
 with no measured transport bottleneck: its warm run measured 437-495 ms, and that time
 is linter work rather than framing.
 
-- **`SocketTransport`.** One `node:net` class whose `server` option group carries
+- **`SocketClientTransport`.** One `node:net` class whose `server` option group carries
   `{ host, port }` or `{ path }`. A consumer that must attach to a language server it
   does not spawn triggers it.
-- **A WebSocket transport.** The platform `WebSocket`, prepending the header bytes on
-  `message` and stripping them on `send`, so the client keeps the byte seam unchanged. A
-  browser consumer that must reach a server it cannot spawn triggers it.
+- **`WebSocketClientTransport`.** Client halves mirroring the mcp package's pair: a Node
+  half that can build on `@orkestrel/websocket` the way mcp's server-side client transport
+  does, and a browser half over the platform `WebSocket` — each prepending the header bytes
+  on `message` and stripping them on `send`, so the client keeps the byte seam unchanged.
+  A consumer that must reach a language server over WebSocket triggers it.
 - **`LSPServer`.** The server half, mirroring the client's contract style: typed
   handlers over the same codec and transport seam. A fleet package that must answer LSP
   requests rather than send them triggers it, and that consumer's first requirement set

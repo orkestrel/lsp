@@ -1,7 +1,7 @@
 import type { EmitterInterface } from '@orkestrel/emitter'
 import type { LSPExit, LSPTransportEventMap } from '@src/core'
 import type { ChildProcess } from 'node:child_process'
-import type { StdioTransportInterface, StdioTransportOptions } from '../types.js'
+import type { StdioClientTransportInterface, StdioClientTransportOptions } from '../types.js'
 import { Emitter } from '@orkestrel/emitter'
 import { LSPError } from '@src/core'
 import { buildSpawn, stopChild, waitForClose, waitForExit } from '@orkestrel/process/server'
@@ -34,12 +34,12 @@ import { spawn } from 'node:child_process'
  *
  * @example
  * ```ts
- * const transport = new StdioTransport({ server: { command: ['my-server', '--stdio'] } })
+ * const transport = new StdioClientTransport({ server: { command: ['my-server', '--stdio'] } })
  * await transport.start()
  * await transport.close()
  * ```
  */
-export class StdioTransport implements StdioTransportInterface {
+export class StdioClientTransport implements StdioClientTransportInterface {
 	readonly #emitter = new Emitter<LSPTransportEventMap>()
 	readonly #command: readonly string[]
 	readonly #directory: string | undefined
@@ -55,7 +55,7 @@ export class StdioTransport implements StdioTransportInterface {
 	 *
 	 * @param options - The child's command, working directory, environment, and grace window.
 	 */
-	constructor(options: StdioTransportOptions) {
+	constructor(options: StdioClientTransportOptions) {
 		this.#command = Object.freeze([...options.server.command])
 		this.#directory = options.server.directory
 		this.#environment =

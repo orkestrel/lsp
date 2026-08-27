@@ -1,6 +1,6 @@
 import type { LSPExit } from '@src/core'
 import { encodeLSPMessage } from '@src/core'
-import { createStdioTransport } from '@src/server'
+import { createStdioClientTransport } from '@src/server'
 import { createRecorder, waitForCondition } from '@orkestrel/test'
 import {
 	collectPeerMessages,
@@ -12,11 +12,11 @@ import { describe, expect, it } from 'vitest'
 
 const PEER = { budget: 5_000 }
 
-describe('createStdioTransport', () => {
+describe('createStdioClientTransport', () => {
 	it('produces a transport that spawns, carries bytes, and ends its child', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
 		const exits = createRecorder<[LSPExit]>()
-		const transport = createStdioTransport(createPeerOptions({ grace: 2_000 }))
+		const transport = createStdioClientTransport(createPeerOptions({ grace: 2_000 }))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		await transport.start()

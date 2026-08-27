@@ -101,9 +101,9 @@ transport listeners during teardown. A close failure that settles before that de
 before the client destroys its emitter. At the deadline, the client emits an `LSPError` coded
 `timeout` and absorbs the later close outcome.
 
-## Stdio transport
+## Stdio client transport
 
-The server environment publishes `StdioTransport`, the byte transport over a language server run as
+The server environment publishes `StdioClientTransport`, the byte transport over a language server run as
 a child process. It carries bytes and never frames: every standard-output chunk reaches the `chunk`
 event exactly as the host delivered it, so a frame split across reads and two frames coalesced into
 one read both arrive unaltered and the client's parser owns the framing. Standard error is drained
@@ -116,12 +116,12 @@ environment; the current directory and this process's environment apply when eit
 
 ```ts
 import { createLSPClient } from '@orkestrel/lsp'
-import { createStdioTransport } from '@orkestrel/lsp/server'
+import { createStdioClientTransport } from '@orkestrel/lsp/server'
 import { pathToFileURL } from 'node:url'
 
 declare const directory: string
 
-const transport = createStdioTransport({
+const transport = createStdioClientTransport({
 	server: { command: ['my-language-server', '--stdio'], directory },
 	grace: 5_000,
 })
@@ -315,12 +315,12 @@ The transport interface exposes these behavioral methods:
 
 The server surface provides these exports:
 
-| Export                    | Kind      | Purpose                                                                   |
-| ------------------------- | --------- | ------------------------------------------------------------------------- |
-| `StdioTransport`          | class     | Implements the byte transport over a language server child process.       |
-| `createStdioTransport`    | function  | Creates a `StdioTransportInterface` from `StdioTransportOptions`.         |
-| `StdioTransportInterface` | interface | Defines the readonly `pid` property beside the byte transport surface.    |
-| `StdioTransportOptions`   | interface | Configures the child's command, directory, environment, and grace window. |
+| Export                          | Kind      | Purpose                                                                       |
+| ------------------------------- | --------- | ----------------------------------------------------------------------------- |
+| `StdioClientTransport`          | class     | Implements the byte transport over a language server child process.           |
+| `createStdioClientTransport`    | function  | Creates a `StdioClientTransportInterface` from `StdioClientTransportOptions`. |
+| `StdioClientTransportInterface` | interface | Defines the readonly `pid` property beside the byte transport surface.        |
+| `StdioClientTransportOptions`   | interface | Configures the child's command, directory, environment, and grace window.     |
 
 The client surface provides these entities and configuration contracts:
 

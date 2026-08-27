@@ -17,5 +17,5 @@ Each entry names one source directory, the guide that documents it, and its mirr
   - Guide: [`guides/lsp.md`](lsp.md)
   - Tests: [`tests/src/core`](../tests/src/core)
 - [`src/server`](../src/server)
-  - Guide: [`guides/lsp.md`](lsp.md#stdio-transport)
+  - Guide: [`guides/lsp.md`](lsp.md#stdio-client-transport)
   - Tests: [`tests/src/server`](../tests/src/server)

@@ -1,5 +1,5 @@
 import type { JSONRPCMessage, LSPDecodeState, LSPExit } from '@src/core'
-import type { StdioTransportOptions } from '@src/server'
+import type { StdioClientTransportOptions } from '@src/server'
 import { parseLSPMessages } from '@src/core'
 import { isRunning } from '@orkestrel/test/server'
 import { waitForCondition } from '@orkestrel/test'
@@ -67,7 +67,7 @@ export function createPeerOptions(options?: {
 	readonly directory?: string
 	readonly environment?: Readonly<Record<string, string | undefined>>
 	readonly grace?: number
-}): StdioTransportOptions {
+}): StdioClientTransportOptions {
 	const command =
 		options?.stubborn === true
 			? [process.execPath, FIXTURE_PEER, '--stubborn']
@@ -91,7 +91,7 @@ export function createPeerOptions(options?: {
  * @remarks The grace window also bounds the wait for the child's stdio close, and the holder's
  * grandchild outlives that wait, so keep it short enough that a close stays quick.
  */
-export function createHolderOptions(release: string, grace: number): StdioTransportOptions {
+export function createHolderOptions(release: string, grace: number): StdioClientTransportOptions {
 	return { server: { command: [process.execPath, FIXTURE_HOLDER, release] }, grace }
 }
 
@@ -102,7 +102,7 @@ export function createHolderOptions(release: string, grace: number): StdioTransp
  * @param grace - The cooperative termination window in milliseconds.
  * @returns Stdio transport options naming Oxlint's language-server mode as the child command.
  */
-export function createOxlintOptions(directory: string, grace: number): StdioTransportOptions {
+export function createOxlintOptions(directory: string, grace: number): StdioClientTransportOptions {
 	return { server: { command: [process.execPath, OXLINT_ENTRY, '--lsp'], directory }, grace }
 }
 

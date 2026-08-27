@@ -1,5 +1,5 @@
 import { createLSPClient } from '@src/core'
-import { createStdioTransport } from '@src/server'
+import { createStdioClientTransport } from '@src/server'
 import { requireValue } from '@orkestrel/test'
 import { destroyScratch, createScratch, isRunning } from '@orkestrel/test/server'
 import {
@@ -19,7 +19,7 @@ describe('src server oxlint receipt', () => {
 	// idle one.
 	it('reads a real Oxlint diagnostic through the client and leaves no child behind', async () => {
 		const scratch = createScratch({ prefix: 'lsp-oxlint-', files: OXLINT_FILES })
-		const transport = createStdioTransport(createOxlintOptions(scratch.path, 2_000))
+		const transport = createStdioClientTransport(createOxlintOptions(scratch.path, 2_000))
 		const client = createLSPClient({
 			transport,
 			workspace: pathToFileURL(scratch.path).href,

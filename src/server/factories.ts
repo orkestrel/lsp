@@ -1,5 +1,5 @@
-import type { StdioTransportInterface, StdioTransportOptions } from './types.js'
-import { StdioTransport } from './transports/StdioTransport.js'
+import type { StdioClientTransportInterface, StdioClientTransportOptions } from './types.js'
+import { StdioClientTransport } from './transports/StdioClientTransport.js'
 
 /**
  * Creates a byte transport over a Language Server Protocol child process.
@@ -14,11 +14,13 @@ import { StdioTransport } from './transports/StdioTransport.js'
  *
  * declare const directory: string
  *
- * const transport = createStdioTransport({ server: { command: ['my-server', '--stdio'] } })
+ * const transport = createStdioClientTransport({ server: { command: ['my-server', '--stdio'] } })
  * const client = createLSPClient({ transport, workspace: pathToFileURL(directory).href })
  * await client.start()
  * ```
  */
-export function createStdioTransport(options: StdioTransportOptions): StdioTransportInterface {
-	return new StdioTransport(options)
+export function createStdioClientTransport(
+	options: StdioClientTransportOptions,
+): StdioClientTransportInterface {
+	return new StdioClientTransport(options)
 }

@@ -21,7 +21,7 @@ import type { LSPTransportInterface } from '@src/core'
  * transport emits `exit`, a further `start` call spawns a fresh child. A `start` call made while a
  * child is still live is refused with an `LSPError` whose `code` property is `duplicate`.
  */
-export interface StdioTransportOptions {
+export interface StdioClientTransportOptions {
 	readonly server: {
 		readonly command: readonly string[]
 		readonly directory?: string
@@ -40,6 +40,6 @@ export interface StdioTransportOptions {
  * reuses an identifier after it reaps the process that held it, so a caller that keeps the number
  * past its generation holds a number rather than a claim on that child.
  */
-export interface StdioTransportInterface extends LSPTransportInterface {
+export interface StdioClientTransportInterface extends LSPTransportInterface {
 	readonly pid: number | undefined
 }
