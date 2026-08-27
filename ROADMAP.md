@@ -110,6 +110,25 @@ folder prunes by naming that path in a `git show` against the commit.
   `optionalOf(unionOf(isNumber, isString))` with a binding refusal case, and the
   `encoding` getter's protocol-default literal carries the comment separating it from
   the advertisement.
+- **The transport rename** (`c9537f2`): the stdio family renamed to the client-half
+  convention — `StdioClientTransport`, `StdioClientTransportInterface`,
+  `StdioClientTransportOptions`, and `createStdioClientTransport` — mirroring the mcp
+  package's naming, with the deferred rows renamed to `SocketClientTransport` and
+  `WebSocketClientTransport`. The vendored `guides/probe.md` mirror deliberately keeps the
+  old factory name until the probe package adopts the rename at its re-pin; the moved
+  published surface obliges a version bump at the next release.
+- **The `Session` adoption** (`8307f2c`, `61d9a3a`, `3859532`, `bb1f148`, consuming the
+  process package's `Supervisor` extract `5fabc07`, `Session` face `b07ba7f`, and audit
+  fixes `5365c51`): the stdio client transport constructs one `Session` per generation
+  from `@orkestrel/process` and drops the `node:child_process` module entirely. The
+  `close` method ends stdin cooperatively under one shared `grace` window, races the
+  child's native ending, and escalates through the package's `stop` method. The
+  transport's unmodified suite proves the adoption — every behavioral row written against
+  the direct-spawn implementation passes against `Session` — and a two-lane audit with
+  executed attacks corroborates it. The process dependency is installed as a packed
+  tarball recorded in `.orkestrel/campaign/tarball-swap.md`, restored to the registry
+  release at publish. The POSIX half of the corrected process-group sentence is read from
+  the installed source, and a POSIX host run is the outstanding reading.
 
 ## Next
 
@@ -117,6 +136,12 @@ Each row names what triggers it, and nothing here is scheduled. As of 2026-08-26
 package's only consumer, the probe package's lint stage, runs warm-resident over stdio
 with no measured transport bottleneck: its warm run measured 437-495 ms, and that time
 is linter work rather than framing.
+
+The pending release runs in layer order. The process package publishes its additive
+surface first. The lsp package then restores its process dependency from the recorded
+tarball to the registry release, re-runs its gates against the registry artifact, bumps
+for its moved surface, and republishes. The probe package then re-pins lsp, adopts
+`createStdioClientTransport`, and its republished guide refreshes the vendored mirror.
 
 - **`SocketClientTransport`.** One `node:net` class whose `server` option group carries
   `{ host, port }` or `{ path }`. A consumer that must attach to a language server it
@@ -168,11 +193,17 @@ them here because the campaign folder prunes and this file outlives the prune.
   default maximum of 20 on 2026-08-26 after this campaign's decomposition, and mcp
   carrying readings of 21 to 30. `lint:check` runs `--deny-warnings`, so enabling the
   rule gates immediately and a fleet sweep comes first.
-- **process** — a supervised child exposes a line stream only: `ProcessInterface.lines`
-  yields decoded strings framed on line terminators, so a transport that frames its own
-  bytes cannot read a child through it and reaches for `node:child_process` directly, as
-  this package's stdio transport does. A raw byte-chunk stream on the same interface
-  would let those transports drop the direct spawn.
+- **scaffold** — the `policy/no-nested-functions` instrument covers the `src` and `app`
+  directories while the architecture rule reaches tests: a real in-body function
+  assignment in a test passed every gate and was caught only by review. Widen the
+  instrument's population, or record the narrowing in the rule.
+- **process** — the stop confirmation window is the package's fixed
+  `PROCESS_CONFIRMATION` value rather than an option, so a consumer whose `grace` sits
+  under it cannot shorten the unconfirmed-kill wait. Surface it as an option, or document
+  the floor.
+- **lsp** — the transport's preserved guards, the `send` method's terminal-facts reading
+  and the retirement half of its generation gate, have no fixture that can redden them. A
+  fixture whose child hands stdin to a grandchild closes both.
 - **fleet** — the guides-execution gap: in the packages that predate the executed-fence
   shape, the parity drop-in resolves names but executes no fence. The drop-in's header
   also carries a count and the word "below"; repair it upstream in the markdown
