@@ -1,6 +1,6 @@
 {
 	"name": "@orkestrel/lsp",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"description": "The @orkestrel/lsp package.",
 	"keywords": [],
 	"homepage": "https://github.com/orkestrel/lsp#readme",
@@ -77,11 +77,11 @@
 	"dependencies": {
 		"@orkestrel/contract": "^0.0.13",
 		"@orkestrel/emitter": "^0.0.8",
-		"@orkestrel/process": "^0.0.6"
+		"@orkestrel/process": "^0.0.7"
 	},
 	"devDependencies": {
 		"@microsoft/api-extractor": "^7.59.0",
-		"@orkestrel/guide": "^0.0.14",
+		"@orkestrel/guide": "^0.0.15",
 		"@orkestrel/probe": "^0.0.9",
 		"@orkestrel/scaffold": "^0.0.57",
 		"@orkestrel/test": "^0.0.11",
