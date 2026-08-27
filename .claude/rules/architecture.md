@@ -106,6 +106,17 @@ kind. It reads declaration syntax and file name, never meaning.
   no bare collection literal.
 - It proves that no source, test, config, or script file carries an `eslint-disable` or
   `oxlint-disable` directive.
+- It proves that every `.claude/rules/*.md` file has a rule-map row in `AGENTS.md` and that every
+  row resolves to a file.
+- It proves the host portability rules that are path- or text-shaped over the populations
+  `POLICY_PORTABILITY_GLOB` and `POLICY_PORTABILITY_SOURCE_GLOB` name: no path segment carries a
+  Windows reserved device name, a character Windows refuses, a trailing dot or space, or a sibling
+  differing only by case; no `package.json` script names a `.sh` file; and no source in the parsed
+  population trims a payload before splitting it on `'\n'`, reads `os.EOL`, or imports `EOL` from
+  `node:os`.
+- It cannot write a filename the host refuses. A Windows host rejects `<`, folds a case collision
+  into one file, and turns `:` into an alternate data stream, so those boundaries are proven from a
+  path population rather than from written files.
 - It does not prove a collection is frozen. It reads the declaration, never the value a call
   returns, so `Object.freeze([…])` and any other call initializer are one syntax to it. The freeze
   obligation in the earlier kind-purity rules binds regardless; only the bare literal is mechanical.

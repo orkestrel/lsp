@@ -105,17 +105,6 @@ export const policy = (): UserConfig => ({
 	},
 })
 
-export const setup = (): UserConfig => ({
-	resolve,
-	test: {
-		name: { label: 'setup', color: 'green' },
-		include: ['tests/setup*.test.ts'],
-		setupFiles: ['./tests/setup.ts'],
-		environment: 'node',
-		browser: { enabled: false },
-	},
-})
-
 export const config = (): UserConfig => ({
 	resolve,
 	test: {
@@ -130,21 +119,35 @@ export const config = (): UserConfig => ({
 	},
 })
 
-export const guides = (): UserConfig => ({
+export const setup = (): UserConfig => ({
 	resolve,
 	test: {
-		name: { label: 'guides', color: 'green' },
-		include: ['tests/guides.test.ts'],
+		name: { label: 'setup', color: 'white' },
+		include: ['tests/setup*.test.ts'],
 		setupFiles: ['./tests/setup.ts'],
 		environment: 'node',
 		browser: { enabled: false },
 	},
 })
 
+export const guides = (): UserConfig => ({
+	resolve,
+	test: {
+		name: { label: 'guides', color: 'green' },
+		include: ['tests/guides.test.ts'],
+		exclude: ['tests/src/**/*.test.ts', 'tests/app/**/*.test.ts', 'tests/setup.test.ts'],
+		setupFiles: ['./tests/setup.ts'],
+		environment: 'node',
+		browser: { enabled: false },
+	},
+})
+
+// Where this package drifts from the official tooling it stays compatible with.
+// The subject is this package, so the proof is hermetic and stays in `npm test`.
 export const conformance = (): UserConfig => ({
 	resolve,
 	test: {
-		name: { label: 'conformance', color: 'blue' },
+		name: { label: 'conformance', color: 'magenta' },
 		include: ['tests/conformance.test.ts'],
 		setupFiles: ['./tests/setup.ts'],
 		environment: 'node',
@@ -187,6 +190,6 @@ export const probe = (): UserConfig => ({
 export default defineConfig({
 	resolve,
 	test: {
-		projects: [srcCore, srcServer, policy, setup, config, guides, conformance, distribution, probe],
+		projects: [srcCore, srcServer, policy, config, setup, guides, conformance, distribution, probe],
 	},
 })

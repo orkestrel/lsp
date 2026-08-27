@@ -730,6 +730,12 @@ transport.
    **When a brief assigns a bench unit a path outside the obvious source tree, name the write limit
    in the brief.** If the sandbox rejects the patch, the unit stops and reports the rejection. Never
    find another write mechanism.
+   **A bench unit writes only under its own `--cd` root and the system temporary directory.** A
+   report path in the orchestrator's repository is outside both, so the write is rejected after the
+   work is already done and the unit improvises a fallback the Orchestrator has to go find. Name the
+   report path inside the unit's own tree, or tell the unit to return the report as its final
+   message and take it from the `--output-last-message` file. Retention still lands the report in
+   `.orkestrel/<package>/` — the Orchestrator copies it there, and the unit never writes it there.
 6. **Ephemeral streams, durable records.** A journal proves a bench is alive and recovers an
    interrupted session. Keep journals under `tmp/`, never commit them, and sweep them at acceptance
    after the final gate evidence is recorded. Durable retention — brief, distillate, verdict,

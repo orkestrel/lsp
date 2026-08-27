@@ -456,16 +456,18 @@ package distributes; each operation reports one baseline word per surface. A sur
 `floor` only where the package distributes a copy. The registry's organization membership ships
 nowhere, so `catalog` refuses when that read fails.
 
-For `new`, `repair`, `catalog`, and `overwrite`, authoritative absence never selects `floor`. A
-registry `404` or a packument with no admitted version stays a `FETCH` refusal, because writing a
-version the registry says is absent produces an uninstallable manifest. `audit` turns release
-absence into questions and returns its audit result. Transport faults, timeouts, rate refusals,
-byte-bound refusals, and integrity refusals can select the floor.
+For `new`, `repair`, `catalog`, and `overwrite`, authoritative absence on a version surface never
+selects `floor`. A registry `404` or a packument with no admitted version stays a `FETCH` refusal,
+because writing a version the registry says is absent produces an uninstallable manifest. `audit`
+turns release absence into questions and returns its audit result. Transport faults, timeouts, rate
+refusals, byte-bound refusals, and integrity refusals can select the floor.
 
-The guide surface is the per-row exception to whole-surface fallback. A failed foreign guide keeps
-the target's existing mirror as its floor, while the other guide rows can still update. When at
-least one selected guide keeps its mirror, `provenance.guides` is `floor` for the result; it is
-`live` only when every selected guide resolved live.
+The guide surface is the per-row exception to whole-surface fallback, for absence as well as for
+faults. A foreign guide the host could not serve — a failed read, or the `404` a published package
+with a private repository answers with — keeps the target's existing mirror as its floor, while the
+other guide rows can still update. When at least one selected guide keeps its mirror,
+`provenance.guides` is `floor` for the result; it is `live` only when every selected guide resolved
+live.
 
 A value `Host` can carry live host-owned bytes beside installed floor bytes for deferred guide and
 catalog paths. Each surface still contributes one baseline. Deferred paths are presence-only, and
@@ -1096,13 +1098,13 @@ Each verb resolves a surface's complete answer before it opens that surface's wr
 a partial answer never becomes a partial pin set. `overwrite` keeps the repair and removal work it
 committed before a later catalog refusal and records that refusal in `note`.
 
-| Verb        | Reads live                                                       | When the network forces a floor                                                                                             | With `--offline`                                                                                            |
-| ----------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `new`       | Declared versions and the vendored host                          | Writes the distributed version and host floors; exits `0` after creating the workspace                                      | Reads no upstream surface, writes the same floors, and exits `0` after creating the workspace               |
-| `audit`     | Declared versions and the vendored host                          | Compares through the distributed floors and exits `1`                                                                       | Compares through the floors; exits `0` for an aligned target or `1` for drift                               |
-| `repair`    | Declared versions and the vendored host                          | Repairs from the distributed floors and exits `1`, even when the terminal audit is aligned                                  | Repairs from the floors; the terminal audit decides exit `0` or `1`                                         |
-| `catalog`   | Organization membership, its packuments, and the selected guides | Refuses a membership or version failure with `FETCH` and exit `1`; preserves each failed guide's local mirror and exits `1` | Is a usage error; exits `2` and writes nothing                                                              |
-| `overwrite` | Everything `repair` and `catalog` read                           | Keeps completed repair and deletion work, names each floor or refused catalog step in `note`, and exits `1`                 | Repairs, deletes, and writes version floors; skips `catalog`, records that refusal in `note`, and exits `1` |
+| Verb        | Reads live                                                       | When the network forces a floor                                                                                                                             | With `--offline`                                                                                            |
+| ----------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `new`       | Declared versions and the vendored host                          | Writes the distributed version and host floors; exits `0` after creating the workspace                                                                      | Reads no upstream surface, writes the same floors, and exits `0` after creating the workspace               |
+| `audit`     | Declared versions and the vendored host                          | Compares through the distributed floors and exits `1`                                                                                                       | Compares through the floors; exits `0` for an aligned target or `1` for drift                               |
+| `repair`    | Declared versions and the vendored host                          | Repairs from the distributed floors and exits `1`, even when the terminal audit is aligned                                                                  | Repairs from the floors; the terminal audit decides exit `0` or `1`                                         |
+| `catalog`   | Organization membership, its packuments, and the selected guides | Refuses a membership or version failure with `FETCH` and exit `1`; preserves the local mirror of each guide that failed or is absent upstream and exits `1` | Is a usage error; exits `2` and writes nothing                                                              |
+| `overwrite` | Everything `repair` and `catalog` read                           | Keeps completed repair and deletion work, names each floor or refused catalog step in `note`, and exits `1`                                                 | Repairs, deletes, and writes version floors; skips `catalog`, records that refusal in `note`, and exits `1` |
 
 A fleet row is compared exactly — `^0.1.0` is stale the moment the registry serves `0.1.2` — and
 that inequality alone raises `audit` to exit `1`. A foreign row is compared inside its declared
