@@ -169,11 +169,13 @@ frames. Retained byte segments are owned copies, so caller mutation after parsin
 later continuation. The parser accepts unknown header fields and refuses malformed parameters in a
 known `Content-Type` field. Use `encodeLSPMessage()` to produce a byte-accurate frame.
 
-The operations over a retained state are published beside the codec. `joinLSPSegments()` flattens a
-segment chain into one owned buffer, and `takeLSPTail()` takes that chain's last bytes as an owned
-buffer, which is how a scan window survives a chunk split. `scanLSPBoundary()` reports the first
-`\r\n\r\n` index in a flat buffer, and that index addresses the buffer you passed, so a caller
-scanning a window adds the window's own offset to it.
+The core package publishes the operations over a retained state beside the codec.
+`joinLSPSegments()` flattens a segment chain into one owned buffer, and `takeLSPTail()` takes that
+chain's last bytes as an owned buffer, which is how a scan window survives a chunk split.
+`scanLSPBoundary()` reports the first `\r\n\r\n` index in a flat buffer, and that index addresses
+the buffer you passed, so a caller scanning a window adds the window's own offset to it.
+`scanLSPBoundary()` returns the boundary's index, so `bytes.subarray(0, boundary)` is the block
+`readLSPHeader()` reads and the body starts at `boundary + 4`.
 
 ```ts
 import type { LSPDecodeState } from '@orkestrel/lsp'
@@ -186,23 +188,25 @@ const boundary = scanLSPBoundary(bytes)
 const overlap = takeLSPTail(state, 3)
 ```
 
-Reach either grammar directly when you frame the bytes yourself. `readLSPHeader()` reads one header
-block and returns the `Content-Length` it declares. `readLSPBody()` reads the content bytes that
-length measures and returns the validated JSON-RPC message. Each refuses with an `LSPError`, and the
-messages you pass as the second argument travel on that error's `context.messages` property, so a
-caller that has already decoded frames keeps them through a refusal.
+When you frame the bytes yourself, reach the header and body grammars directly. `readLSPHeader()`
+reads one header block and returns the `Content-Length` it declares. `readLSPBody()` reads the
+content bytes that length measures and returns the validated JSON-RPC message. Each refuses with an
+`LSPError`, and when you pass a `messages` argument it travels on that error's `context.messages`
+property, so a caller that has already decoded frames keeps them through a refusal.
 
 ```ts
-import { readLSPBody, readLSPHeader } from '@orkestrel/lsp'
+import { encodeLSPMessage, readLSPBody, readLSPHeader, scanLSPBoundary } from '@orkestrel/lsp'
 
-const content = '{"jsonrpc":"2.0","method":"initialized"}'
-const encoder = new TextEncoder()
-const body = encoder.encode(content)
-const header = encoder.encode(`Content-Length: ${body.byteLength}`)
+const frame = encodeLSPMessage({ jsonrpc: '2.0', method: 'initialized' })
+const boundary = scanLSPBoundary(frame)
 
-const length = readLSPHeader(header, [])
-const message = readLSPBody(body.subarray(0, length), [])
+if (boundary !== undefined) {
+	const length = readLSPHeader(frame.subarray(0, boundary))
+	const message = readLSPBody(frame.subarray(boundary + 4, boundary + 4 + length))
+}
 ```
+
+`length` reads `40`, the encoded body's byte length, and `message.method` reads `initialized`.
 
 ## Validation
 
@@ -335,22 +339,22 @@ The client surface provides these entities and configuration contracts:
 
 The framing, timing, and error surface provides these exports:
 
-| Export             | Kind      | Purpose                                                       |
-| ------------------ | --------- | ------------------------------------------------------------- |
-| `encodeLSPMessage` | function  | Encodes a JSON-RPC message into an LSP frame.                 |
-| `parseLSPMessages` | function  | Decodes complete messages and returns retained framing state. |
-| `LSPDecodeState`   | type      | Describes retained incremental framing bytes.                 |
-| `joinLSPSegments`  | function  | Flattens retained decode segments into one owned buffer.      |
-| `takeLSPTail`      | function  | Takes the last retained bytes of a decode state.              |
-| `scanLSPBoundary`  | function  | Finds the first header boundary in a flat buffer.             |
-| `readLSPHeader`    | function  | Reads a header block and returns its declared content length. |
-| `readLSPBody`      | function  | Reads one content body as a validated JSON-RPC message.       |
-| `waitForDeadline`  | function  | Waits for a deadline to elapse without holding the loop open. |
-| `LSPError`         | class     | Reports a package failure with a stable code.                 |
-| `isLSPError`       | function  | Checks for a branded package error.                           |
-| `LSPErrorCode`     | type      | Lists stable package error codes.                             |
-| `LSPErrorContext`  | interface | Describes structured error details.                           |
-| `LSPErrorOptions`  | interface | Configures a package error.                                   |
+| Export             | Kind      | Purpose                                                                  |
+| ------------------ | --------- | ------------------------------------------------------------------------ |
+| `encodeLSPMessage` | function  | Encodes a JSON-RPC message into an LSP frame.                            |
+| `parseLSPMessages` | function  | Decodes complete messages and returns retained framing state.            |
+| `LSPDecodeState`   | type      | Describes retained incremental framing bytes.                            |
+| `joinLSPSegments`  | function  | Flattens retained decode segments into one owned buffer.                 |
+| `takeLSPTail`      | function  | Takes the last retained bytes of a decode state.                         |
+| `scanLSPBoundary`  | function  | Finds the first header boundary in a flat buffer.                        |
+| `readLSPHeader`    | function  | Reads a header block and returns its declared content length.            |
+| `readLSPBody`      | function  | Reads one content body as a validated JSON-RPC message.                  |
+| `waitForDeadline`  | function  | Waits for a deadline to elapse without holding the host event loop open. |
+| `LSPError`         | class     | Reports a package failure with a stable code.                            |
+| `isLSPError`       | function  | Checks for a branded package error.                                      |
+| `LSPErrorCode`     | type      | Lists stable package error codes.                                        |
+| `LSPErrorContext`  | interface | Describes structured error details.                                      |
+| `LSPErrorOptions`  | interface | Configures a package error.                                              |
 
 The JSON-RPC and initialization surface provides these payload types:
 

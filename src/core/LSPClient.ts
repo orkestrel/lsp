@@ -145,6 +145,8 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	get encoding(): LSPPositionEncoding | undefined {
+		// `utf-16` here is the protocol's own default for a server that omitted `positionEncoding`,
+		// not this client's advertisement.
 		return (
 			this.#capabilities?.positionEncoding ??
 			(this.#capabilities === undefined ? undefined : 'utf-16')

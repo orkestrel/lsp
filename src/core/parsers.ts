@@ -22,7 +22,8 @@ import {
  * @param chunk - The next transport bytes.
  * @param state - Incomplete decode state returned by the preceding call. Default: `undefined`.
  * @returns The complete messages and the state required by the next call.
- * @throws {@link LSPError} Thrown for invalid framing, UTF-8, JSON, or JSON-RPC message shapes.
+ * @throws {@link LSPError} Thrown when the framing, the UTF-8 content, the JSON text, or the
+ * JSON-RPC message shape is invalid.
  *
  * @example
  * ```ts

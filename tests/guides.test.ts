@@ -3,7 +3,14 @@
 // package's own, and are the only part a sibling package changes.
 
 import { describe, expect, it } from 'vitest'
-import { LSP_CAPABILITIES } from '@src/core'
+import {
+	encodeLSPMessage,
+	isJSONRPCNotification,
+	LSP_CAPABILITIES,
+	readLSPBody,
+	readLSPHeader,
+	scanLSPBoundary,
+} from '@src/core'
 import {
 	createGuide,
 	createSource,
@@ -72,6 +79,31 @@ describe('advertised position encodings', () => {
 	it('states that advertisement in the client guide', () => {
 		expect(requireValue(files['guides/lsp.md'], 'Missing file: guides/lsp.md')).toContain(
 			'The client advertises `utf-16` as its only position encoding.',
+		)
+	})
+})
+
+// The framing guide's own-framing fence claims the offsets a caller slices a frame at, and the two
+// values that slicing yields. Parity proves those names resolve, so the fence is transcribed here
+// and its claimed values are asserted against what the codec returns.
+describe('framing bytes yourself', () => {
+	it('reads the declared length and the framed message at the boundary offsets', () => {
+		const frame = encodeLSPMessage({ jsonrpc: '2.0', method: 'initialized' })
+		const boundary = requireValue(scanLSPBoundary(frame), 'Missing header boundary')
+		const length = readLSPHeader(frame.subarray(0, boundary))
+		const message = readLSPBody(frame.subarray(boundary + 4, boundary + 4 + length))
+
+		expect(length).toBe(40)
+		expect(isJSONRPCNotification(message) ? message.method : undefined).toBe('initialized')
+	})
+
+	it('states those offsets in the framing guide', () => {
+		const text = requireValue(files['guides/lsp.md'], 'Missing file: guides/lsp.md').replace(
+			/\s+/g,
+			' ',
+		)
+		expect(text).toContain(
+			'`bytes.subarray(0, boundary)` is the block `readLSPHeader()` reads and the body starts at `boundary + 4`.',
 		)
 	})
 })

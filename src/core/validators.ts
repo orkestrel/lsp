@@ -171,7 +171,7 @@ export function isLSPDiagnostic(value: unknown): value is LSPDiagnostic {
 	return holds(() => {
 		if (!isLSPRange(value.range) || !isString(value.message)) return false
 		if (!optionalOf(literalOf(1, 2, 3, 4))(value.severity)) return false
-		if (value.code !== undefined && !isNumber(value.code) && !isString(value.code)) return false
+		if (!optionalOf(unionOf(isNumber, isString))(value.code)) return false
 		if (value.codeDescription !== undefined && !isLSPCodeDescription(value.codeDescription))
 			return false
 		if (value.source !== undefined && !isString(value.source)) return false

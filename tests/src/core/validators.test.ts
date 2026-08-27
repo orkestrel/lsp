@@ -207,6 +207,12 @@ describe('LSP wire element and literal boundaries', () => {
 		expect(isLSPServerCapabilities({ textDocumentSync: undefined })).toBe(true)
 	})
 
+	it('accepts either diagnostic code type and refuses a third', () => {
+		expect(isLSPDiagnostic({ ...diagnostic, code: 'TS2304' })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, code: 2304 })).toBe(true)
+		expect(isLSPDiagnostic({ ...diagnostic, code: true })).toBe(false)
+	})
+
 	it('refuses a prototype-carrying instance and accepts an unknown extra member', () => {
 		expect(isLSPRange(new WireRange())).toBe(false)
 		expect(isLSPRange({ ...new WireRange() })).toBe(true)

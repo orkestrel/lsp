@@ -137,11 +137,12 @@ export function scanLSPBoundary(bytes: Uint8Array): number | undefined {
  *
  * @param header - The header bytes, ending before the `\r\n\r\n` boundary.
  * @param messages - The messages decoded before this header, attached to a refusal's context.
+ * Default: an empty list.
  * @returns The declared `Content-Length` in bytes.
- * @throws {@link LSPError} Thrown with code `framing` for a non-ASCII byte, a field without a name
- * and a colon, a missing, repeated, empty, non-numeric, or unsafe `Content-Length`, a length above
- * {@link LSP_CONTENT_LIMIT}, and a repeated `Content-Type`, an unsupported media type, a malformed
- * parameter, a repeated charset, or a charset other than UTF-8.
+ * @throws {@link LSPError} Thrown with code `framing` when the header carries a non-ASCII byte, a
+ * field without a name and a colon, a missing, repeated, empty, non-numeric, or unsafe
+ * `Content-Length`, a length above {@link LSP_CONTENT_LIMIT}, a repeated `Content-Type`, an
+ * unsupported media type, a malformed parameter, a repeated charset, or a charset other than UTF-8.
  *
  * @remarks
  * Field names are case-insensitive and unknown fields are ignored. `Content-Type` is optional, and
@@ -149,10 +150,13 @@ export function scanLSPBoundary(bytes: Uint8Array): number | undefined {
  *
  * @example
  * ```ts
- * const length = readLSPHeader(new TextEncoder().encode('Content-Length: 2'), [])
+ * const length = readLSPHeader(new TextEncoder().encode('Content-Length: 2'))
  * ```
  */
-export function readLSPHeader(header: Uint8Array, messages: readonly JSONRPCMessage[]): number {
+export function readLSPHeader(
+	header: Uint8Array,
+	messages: readonly JSONRPCMessage[] = [],
+): number {
 	for (let index = 0; index < header.byteLength; index += 1) {
 		const byte = header[index]
 		if (byte === undefined || byte > 127)
@@ -271,6 +275,7 @@ export function readLSPHeader(header: Uint8Array, messages: readonly JSONRPCMess
  *
  * @param body - The content bytes the header's `Content-Length` measures.
  * @param messages - The messages decoded before this body, attached to a refusal's context.
+ * Default: an empty list.
  * @returns The decoded request, notification, or response.
  * @throws {@link LSPError} Thrown with code `framing` when the bytes are not valid UTF-8, and with
  * code `protocol` when the text is not JSON or the value is not a JSON-RPC message.
@@ -278,10 +283,13 @@ export function readLSPHeader(header: Uint8Array, messages: readonly JSONRPCMess
  * @example
  * ```ts
  * const body = new TextEncoder().encode('{"jsonrpc":"2.0","method":"initialized"}')
- * const message = readLSPBody(body, [])
+ * const message = readLSPBody(body)
  * ```
  */
-export function readLSPBody(body: Uint8Array, messages: readonly JSONRPCMessage[]): JSONRPCMessage {
+export function readLSPBody(
+	body: Uint8Array,
+	messages: readonly JSONRPCMessage[] = [],
+): JSONRPCMessage {
 	let text: string
 	try {
 		text = new TextDecoder('utf-8', { fatal: true }).decode(body)
@@ -309,7 +317,7 @@ export function readLSPBody(body: Uint8Array, messages: readonly JSONRPCMessage[
 /**
  * Waits for a deadline to elapse.
  *
- * @param ms - The number of milliseconds to wait.
+ * @param timeout - The number of milliseconds to wait.
  * @returns A promise that resolves after the deadline elapses, and never rejects.
  *
  * @remarks
@@ -324,8 +332,8 @@ export function readLSPBody(body: Uint8Array, messages: readonly JSONRPCMessage[
  * await Promise.race([work, waitForDeadline(30_000)])
  * ```
  */
-export function waitForDeadline(ms: number): Promise<void> {
-	const deadline = AbortSignal.timeout(ms)
+export function waitForDeadline(timeout: number): Promise<void> {
+	const deadline = AbortSignal.timeout(timeout)
 	return new Promise<void>((resolve) => {
 		deadline.addEventListener('abort', () => resolve(), { once: true })
 	})
