@@ -1,11 +1,10 @@
 import type { EmitterInterface } from '@orkestrel/emitter'
 import type { LSPExit, LSPTransportEventMap } from '@src/core'
-import type { ChildProcess } from 'node:child_process'
+import type { ProcessExit, SessionInterface } from '@orkestrel/process'
 import type { StdioClientTransportInterface, StdioClientTransportOptions } from '../types.js'
 import { Emitter } from '@orkestrel/emitter'
-import { LSPError } from '@src/core'
-import { buildSpawn, stopChild, waitForClose, waitForExit } from '@orkestrel/process/server'
-import { spawn } from 'node:child_process'
+import { LSPError, waitForDeadline } from '@src/core'
+import { createSession } from '@orkestrel/process/server'
 
 /**
  * Streams Language Server Protocol bytes between a client and a child process over stdio.
@@ -14,16 +13,19 @@ import { spawn } from 'node:child_process'
  * The transport carries bytes and never frames: every standard-output chunk reaches the `chunk`
  * event exactly as the host delivered it, so a frame split across reads and two frames coalesced
  * into one read both arrive unaltered and the client's parser owns the framing. Standard error is
- * drained so a chatty server cannot fill its pipe and stall.
+ * read continuously and retained as a bounded tail by the process package, so a chatty server
+ * cannot fill its pipe and stall.
  *
  * Each accepted `start` opens a generation that owns its child until termination settles. Only the
  * current generation reaches the emitter, so a child whose standard output a grandchild holds open
  * past its own exit delivers neither a stale `exit` nor a stale chunk into the generation that
- * replaced it. The retired generation's streams keep draining, so a pipe-holding grandchild never
- * blocks on a full pipe.
+ * replaced it. The process package waits at most `grace` for that output after the child's own
+ * ending and then closes the read end, so a pipe-holding grandchild defers no settlement and stalls
+ * on no full pipe.
  *
- * The child stays in this process's group rather than leading its own, so `stopChild` reaches it
- * through a direct signal after the host reports that no group owns its identifier.
+ * A termination reaches the child's whole tree: the child leads its own process group on a POSIX
+ * host and that group receives the signals, while Windows carries no such group and the host's
+ * `taskkill` utility ends the tree there instead.
  *
  * `start` rejects with an `LSPError` coded `spawn` when the command is empty, when the host refuses
  * the spawn, and when the child reports a spawn fault; it rejects with one coded `duplicate` while
@@ -45,7 +47,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	readonly #directory: string | undefined
 	readonly #environment: Readonly<Record<string, string | undefined>> | undefined
 	readonly #grace: number
-	#child: ChildProcess | undefined = undefined
+	#session: SessionInterface | undefined = undefined
 	#generation = 0
 	#owner: number | undefined = undefined
 	#closing: Promise<void> | undefined = undefined
@@ -70,7 +72,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	}
 
 	get pid(): number | undefined {
-		return this.#owner === this.#generation ? this.#child?.pid : undefined
+		return this.#owner === this.#generation ? this.#session?.pid : undefined
 	}
 
 	/**
@@ -95,45 +97,29 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 		if (file === undefined || file.length === 0)
 			throw new LSPError('The stdio transport requires a command executable', { code: 'spawn' })
 		const generation = this.#generation
-		const child = this.#launch(file, parameters)
-		this.#child = child
+		const session = this.#open(file, parameters, generation)
+		// The session spawns eagerly and the host fixes the child's identifier before construction
+		// returns, so an absent identifier is a spawn the host refused rather than one still in
+		// flight. Taking ownership only past this reading is what keeps a refused spawn off the
+		// emitter, because every session callback is gated on the generation it owns.
+		if (session.pid === undefined) throw await this.#refuse(session)
+		this.#session = session
 		this.#owner = generation
-		try {
-			await new Promise<void>((resolve, reject) => {
-				child.once('spawn', () => resolve())
-				child.once('error', (cause: unknown) =>
-					reject(
-						new LSPError('The stdio transport could not spawn its server', {
-							code: 'spawn',
-							cause,
-						}),
-					),
-				)
-			})
-		} catch (error) {
-			this.#child = undefined
-			this.#owner = undefined
-			throw error
-		}
-		this.#observe(child, generation)
 	}
 
 	/**
 	 * Writes bytes to the child's standard input.
 	 *
 	 * @param bytes - The encoded frame to deliver.
-	 * @returns True if the child's input stream accepted the bytes; false otherwise.
+	 * @returns True if the child's input channel accepted the bytes; false otherwise.
 	 */
 	async send(bytes: Uint8Array): Promise<boolean> {
-		const child = this.#child
-		if (child === undefined || child.exitCode !== null || child.signalCode !== null) return false
-		const stdin = child.stdin
-		if (stdin === null || stdin.writableEnded || stdin.destroyed) return false
-		return await new Promise<boolean>((resolve) => {
-			stdin.write(bytes, (fault: Error | null | undefined) =>
-				resolve(fault === null || fault === undefined),
-			)
-		})
+		const session = this.#session
+		// A child the host has recorded as ended accepts nothing further, and its input channel can
+		// stay writable past that moment while a descendant holds the pipe open, so the refusal is
+		// read from the terminal facts rather than from the channel alone.
+		if (session === undefined || session.code !== null || session.signal !== null) return false
+		return await session.write(bytes)
 	}
 
 	/**
@@ -142,19 +128,21 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	 * @returns A promise that resolves after the child has exited and its generation has retired.
 	 * @throws An `LSPError` coded `timeout` when the process package cannot confirm the child
 	 * stopped; the transport keeps the still-live child, so a later `start` is still refused.
-	 * @remarks Ending the child's input stream is the cooperative signal a conformant language server
-	 * answers by exiting. A child still live after `grace` is handed to the process package's
-	 * `stopChild` helper, which signals it, waits `grace`, and escalates to an unconditional kill.
-	 * A second `close` called while the first is in flight settles on that same termination rather
-	 * than resolving early. The wait for the child's stdio to close is bounded by `grace` too, so a
-	 * grandchild holding the child's standard output delays neither this call nor the `exit` event.
+	 * @remarks Closing the child's input channel is the cooperative signal a conformant language
+	 * server answers by exiting, and it terminates nothing on its own. A child still live after
+	 * `grace` is handed to the session's `stop`, which signals the child's process group and
+	 * escalates to an unconditional kill after `grace` on a POSIX host, and ends the child's tree
+	 * through the host's `taskkill` utility on Windows. A second `close` called while the first is in
+	 * flight settles on that same termination rather than resolving early. The wait for the child's
+	 * stdio to close is bounded by `grace` too, so a grandchild holding the child's standard output
+	 * delays neither this call nor the `exit` event.
 	 */
 	async close(): Promise<void> {
 		const closing = this.#closing
 		if (closing !== undefined) return await closing
-		const child = this.#child
-		if (child === undefined || this.#owner !== this.#generation) return
-		const settling = this.#settle(child, this.#generation)
+		const session = this.#session
+		if (session === undefined || this.#owner !== this.#generation) return
+		const settling = this.#settle(session, this.#generation)
 		this.#closing = settling
 		try {
 			await settling
@@ -163,72 +151,101 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 		}
 	}
 
-	async #settle(child: ChildProcess, generation: number): Promise<void> {
-		const stdin = child.stdin
-		if (stdin !== null && !stdin.writableEnded && !stdin.destroyed) stdin.end()
-		await waitForExit(child, this.#grace)
-		if (child.exitCode === null && child.signalCode === null) {
+	async #settle(session: SessionInterface, generation: number): Promise<void> {
+		// One deadline bounds the whole cooperative phase, because the transport documents one
+		// `grace` rather than a window per step: a child that stops reading its input holds the
+		// channel's flush open, and a second timer would let that flush spend the window the child's
+		// own ending was promised.
+		const cooperative = waitForDeadline(this.#grace)
+		await Promise.race([session.end(), cooperative])
+		// `ending` settles at the child's own exit, while `exit` waits out the window a grandchild
+		// holding the pipe opens, so racing `exit` here would escalate against a child that already
+		// left.
+		await Promise.race([session.ending, cooperative])
+		if (session.code === null && session.signal === null) {
 			// The rejection below is unproven. A POSIX host cannot refuse SIGKILL, so no real child
 			// drives a false return here: a fixture that ignores SIGTERM reports a confirmed stop at
-			// a zero window and at a graced one alike, and simulating the helper would prove nothing
+			// a zero window and at a graced one alike, and simulating the session would prove nothing
 			// about it. A host that can hold a process past SIGKILL closes the gap — a Windows tree
 			// whose kill utility fails, or a process blocked in the kernel — so the branch waits on
 			// that host joining the suite's matrix.
-			const stopped = await stopChild(child, this.#grace, this.#grace)
+			const stopped = await session.stop()
 			if (!stopped)
 				throw new LSPError('The stdio transport could not confirm its child process stopped', {
 					code: 'timeout',
-					context: { value: child.pid },
+					context: { value: session.pid },
 				})
 		}
-		if (generation === this.#generation) await waitForClose(child, this.#grace)
-		this.#retire(generation, { code: child.exitCode, signal: child.signalCode })
+		const exit = await session.exit
+		this.#retire(generation, { code: exit.code, signal: exit.signal })
+		await session.destroy()
 	}
 
-	#launch(file: string, parameters: readonly string[]): ChildProcess {
+	#open(file: string, parameters: readonly string[], generation: number): SessionInterface {
 		const directory = this.#directory
 		const environment = this.#environment
 		try {
-			const input = buildSpawn(
-				{ file, arguments: parameters },
-				{
-					...(directory === undefined ? {} : { workspace: directory }),
-					...(environment === undefined ? {} : { environment }),
+			return createSession({
+				command: {
+					file,
+					arguments: parameters,
+					// `server.environment` is the child's COMPLETE environment, so an isolated spawn is
+					// what makes the configured record the whole of it rather than an overlay on this
+					// process's own.
+					...(environment === undefined ? {} : { environment, isolated: true }),
 				},
-			)
-			return spawn(input.file, [...input.arguments], {
-				stdio: ['pipe', 'pipe', 'pipe'],
-				windowsVerbatimArguments: input.verbatim,
-				...(directory === undefined ? {} : { cwd: directory }),
-				...(environment === undefined ? {} : { env: { ...environment } }),
+				// An unconfigured directory means this process's own, which is the directory the host
+				// would hand the child anyway.
+				workspace: directory ?? process.cwd(),
+				grace: this.#grace,
+				drain: this.#grace,
+				// The listeners are installed with the spawn rather than after it, so the first chunk a
+				// child can produce already has somewhere to go.
+				on: {
+					stdout: this.#deliver.bind(this, generation),
+					error: this.#report.bind(this, generation),
+					exit: this.#conclude.bind(this, generation),
+				},
 			})
 		} catch (cause) {
 			throw new LSPError('The stdio transport could not spawn its server', { code: 'spawn', cause })
 		}
 	}
 
-	#observe(child: ChildProcess, generation: number): void {
-		child.stdout?.on('data', (chunk: Buffer) => this.#deliver(generation, chunk))
-		child.stderr?.resume()
-		child.stdin?.on('error', (fault: unknown) => this.#report(generation, fault))
-		child.on('error', (fault: unknown) => this.#report(generation, fault))
-		child.on('close', (code: number | null, signal: NodeJS.Signals | null) =>
-			this.#retire(generation, { code, signal }),
-		)
+	async #refuse(session: SessionInterface): Promise<LSPError> {
+		const reported = Promise.withResolvers<unknown>()
+		session.emitter.on('error', reported.resolve)
+		// A refused spawn reports its host cause on the session's `error` event before the child's
+		// ending settles, so that ending bounds the wait for the cause rather than a timer of its own.
+		const cause = await Promise.race([reported.promise, session.ending])
+		await session.destroy()
+		return new LSPError('The stdio transport could not spawn its server', { code: 'spawn', cause })
+	}
+
+	#owns(generation: number): boolean {
+		return this.#owner === generation && generation === this.#generation
 	}
 
 	#deliver(generation: number, chunk: Uint8Array): void {
-		if (generation !== this.#generation) return
+		if (!this.#owns(generation)) return
 		this.#emitter.emit('chunk', chunk)
 	}
 
 	#report(generation: number, fault: unknown): void {
-		if (generation !== this.#generation) return
+		if (!this.#owns(generation)) return
 		this.#emitter.emit('error', fault)
 	}
 
+	// A close in flight owns its generation's retirement. The session reaches its terminal moment
+	// inside `stop` even when that termination went unconfirmed, so retiring from this event would
+	// release the refusal window that a `timeout`-coded close keeps open over a still-live child.
+	#conclude(generation: number, exit: ProcessExit): void {
+		if (!this.#owns(generation) || this.#closing !== undefined) return
+		this.#retire(generation, { code: exit.code, signal: exit.signal })
+	}
+
 	// Retiring a generation is what makes its `exit` fire exactly once: the first settlement to
-	// arrive — the host's own `close` event or the bounded wait inside `#settle` — advances the
+	// arrive — the session's own terminal moment or the bounded wait inside `#settle` — advances the
 	// counter, and every later listener carrying the retired number returns before it emits.
 	#retire(generation: number, exit: LSPExit): void {
 		if (generation !== this.#generation) return

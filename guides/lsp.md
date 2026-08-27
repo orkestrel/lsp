@@ -106,8 +106,9 @@ before the client destroys its emitter. At the deadline, the client emits an `LS
 The server environment publishes `StdioClientTransport`, the byte transport over a language server run as
 a child process. It carries bytes and never frames: every standard-output chunk reaches the `chunk`
 event exactly as the host delivered it, so a frame split across reads and two frames coalesced into
-one read both arrive unaltered and the client's parser owns the framing. Standard error is drained
-so a chatty server can't fill its pipe and stall.
+one read both arrive unaltered and the client's parser owns the framing. Standard error is read
+continuously and retained as a bounded tail by the process package, so a chatty server can't fill
+its pipe and stall.
 
 `server.command` is the child's argument vector: its first element names the executable and the rest
 are its arguments, so a launcher and its target stay one value and no shell splits them.
@@ -131,16 +132,17 @@ await client.destroy()
 ```
 
 `grace` bounds the cooperative termination window in milliseconds, and `5000` applies when it is
-absent. `close()` ends the child's input stream, waits `grace` for the child's own exit, and hands a
-child that outlives that window to the process package's `stopChild` helper, which signals it, waits
-`grace` again, and escalates to an unconditional kill. The child stays in the parent's process group
-rather than leading its own, so that helper reaches it through a direct signal after the host reports
-that no group owns its identifier. `close()` then waits up to `grace` more for the child's streams to
-close, and emits `exit` carrying the code and signal the host reported, so a grandchild holding the
-child's standard output open past its exit delays neither the call nor the event. A second `close()`
-called while the first is in flight settles on that same termination rather than resolving early.
-When the helper cannot confirm the child stopped, `close()` rejects with an `LSPError` whose `code`
-property is `timeout`, and the transport keeps the still-live child.
+absent. `close()` closes the child's input channel, waits `grace` for the child's own ending, and
+hands a child that outlives that window to the process package session's `stop`, which signals the
+child's process group and escalates to an unconditional kill after `grace` again. The child leads
+its own process group on a POSIX host, so that signal reaches its whole tree; Windows carries no
+such group, so the host's `taskkill` utility ends the tree there instead. `close()` then waits up to
+`grace` more for the child's streams to close, and emits `exit` carrying the code and signal the
+host reported, so a grandchild holding the child's standard output open past its exit delays neither
+the call nor the event. A second `close()` called while the first is in flight settles on that same
+termination rather than resolving early. When the package cannot confirm the child stopped,
+`close()` rejects with an `LSPError` whose `code` property is `timeout`, and the transport keeps the
+still-live child.
 
 Each accepted `start()` call opens a generation that owns its child, and only the current generation
 reaches the emitter. `start()` spawns the configured child and resolves after the host reports it
