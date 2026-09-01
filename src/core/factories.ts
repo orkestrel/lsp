@@ -10,7 +10,7 @@ import { LSPClient } from './LSPClient.js'
  *
  * @example
  * ```ts
- * import type { LSPTransportInterface } from './types.js'
+ * import type { LSPTransportInterface } from '@orkestrel/lsp'
  * import { pathToFileURL } from 'node:url'
  *
  * declare const transport: LSPTransportInterface

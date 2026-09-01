@@ -9,7 +9,7 @@ import { StdioClientTransport } from './transports/StdioClientTransport.js'
  *
  * @example
  * ```ts
- * import { createLSPClient } from '../core/factories.js'
+ * import { createLSPClient } from '@orkestrel/lsp'
  * import { pathToFileURL } from 'node:url'
  *
  * declare const directory: string

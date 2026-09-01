@@ -17,6 +17,38 @@ export const LSP_METHODS = Object.freeze({
 export const LSP_ENCODINGS = Object.freeze(['utf-8', 'utf-16', 'utf-32'] as const)
 
 /**
+ * Lists the machine-readable failure categories an {@link LSPError} carries, in declaration order.
+ *
+ * @remarks
+ * One list feeds the {@link LSPErrorCode} union and the `isLSPError` guard, so a category cannot be
+ * constructed by one and refused by the other. Adding a category here reaches both at once.
+ *
+ * @example
+ * ```ts
+ * LSP_ERROR_CODES // ['spawn', 'framing', 'protocol', 'duplicate', 'server', 'timeout', 'aborted', 'closed']
+ * ```
+ */
+export const LSP_ERROR_CODES = Object.freeze([
+	'spawn',
+	'framing',
+	'protocol',
+	'duplicate',
+	'server',
+	'timeout',
+	'aborted',
+	'closed',
+] as const)
+
+/** Lists the diagnostic severities named by the Language Server Protocol, from error to hint. */
+export const LSP_DIAGNOSTIC_SEVERITIES = Object.freeze([1, 2, 3, 4] as const)
+
+/** Lists the diagnostic tags named by the Language Server Protocol. */
+export const LSP_DIAGNOSTIC_TAGS = Object.freeze([1, 2] as const)
+
+/** Lists the text synchronization modes named by the Language Server Protocol. */
+export const LSP_SYNC_KINDS = Object.freeze([0, 1, 2] as const)
+
+/**
  * Describes the capabilities this client advertises in its initialize request.
  *
  * @remarks

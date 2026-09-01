@@ -16,6 +16,7 @@ import type {
 	LSPDocumentURI,
 	LSPExit,
 	LSPInitializeParams,
+	LSPPending,
 	LSPPositionEncoding,
 	LSPServerCapabilities,
 	LSPTextDocumentItem,
@@ -50,7 +51,7 @@ import {
  *
  * @example
  * ```ts
- * import type { LSPTransportInterface } from './types.js'
+ * import type { LSPTransportInterface } from '@orkestrel/lsp'
  * import { join } from 'node:path'
  * import { pathToFileURL } from 'node:url'
  *
@@ -84,25 +85,8 @@ export class LSPClient implements LSPClientInterface {
 	readonly #chunk: (chunk: Uint8Array) => void
 	readonly #exit: (exit: LSPExit) => void
 	readonly #error: (error: unknown) => void
-	readonly #pending = new Map<
-		JSONRPCId,
-		{
-			readonly resolve: (value: unknown) => void
-			readonly reject: (reason?: unknown) => void
-			readonly method: string
-			readonly signal: AbortSignal
-			readonly abort: () => void
-		}
-	>()
-	readonly #publications = new Map<
-		LSPDocumentURI,
-		{
-			readonly resolve: (diagnostics: readonly LSPDiagnostic[]) => void
-			readonly reject: (reason?: unknown) => void
-			readonly signal: AbortSignal
-			readonly abort: () => void
-		}
-	>()
+	readonly #pending = new Map<JSONRPCId, LSPPending<unknown> & { readonly method: string }>()
+	readonly #publications = new Map<LSPDocumentURI, LSPPending<readonly LSPDiagnostic[]>>()
 	readonly #documents = new Set<LSPDocumentURI>()
 	readonly #diagnostics = new Map<
 		LSPDocumentURI,
@@ -592,21 +576,31 @@ export class LSPClient implements LSPClientInterface {
 		this.#settlePublication(uri, aborted, true)
 	}
 
+	// The lookup, the removal, and the abort-listener detach are identical for both entry maps,
+	// so one method owns them. The resolve paths stay apart: a publication owns its own frozen
+	// copy of the diagnostics list, and a request resolves the value it received.
+	#settleEntry<Key, Value>(
+		entries: Map<Key, LSPPending<Value>>,
+		key: Key,
+	): LSPPending<Value> | undefined {
+		const entry = entries.get(key)
+		if (entry === undefined) return undefined
+		entries.delete(key)
+		entry.signal.removeEventListener('abort', entry.abort)
+		return entry
+	}
+
 	#settlePublication(uri: LSPDocumentURI, value: unknown, failed: boolean): boolean {
-		const publication = this.#publications.get(uri)
+		const publication = this.#settleEntry(this.#publications, uri)
 		if (publication === undefined) return false
-		this.#publications.delete(uri)
-		publication.signal.removeEventListener('abort', publication.abort)
 		if (failed) publication.reject(value)
 		else if (Array.isArray(value)) publication.resolve(Object.freeze([...value]))
 		return true
 	}
 
 	#settle(id: JSONRPCId, value: unknown, failed: boolean): boolean {
-		const pending = this.#pending.get(id)
+		const pending = this.#settleEntry(this.#pending, id)
 		if (pending === undefined) return false
-		this.#pending.delete(id)
-		pending.signal.removeEventListener('abort', pending.abort)
 		if (failed) pending.reject(value)
 		else pending.resolve(value)
 		return true

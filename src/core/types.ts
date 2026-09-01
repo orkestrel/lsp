@@ -1,4 +1,10 @@
 import type { EmitterErrorHandler, EmitterHooks, EmitterInterface } from '@orkestrel/emitter'
+import type {
+	LSP_DIAGNOSTIC_SEVERITIES,
+	LSP_DIAGNOSTIC_TAGS,
+	LSP_ERROR_CODES,
+	LSP_SYNC_KINDS,
+} from './constants.js'
 
 /** Identifies a JSON-RPC request and its matching response. */
 export type JSONRPCId = string | number
@@ -82,11 +88,11 @@ export interface LSPTextDocumentItem {
 	readonly text: string
 }
 
-/** Identifies the standard severity assigned to a diagnostic. */
-export type LSPDiagnosticSeverity = 1 | 2 | 3 | 4
+/** Identifies the standard severity assigned to a diagnostic, derived from {@link LSP_DIAGNOSTIC_SEVERITIES}. */
+export type LSPDiagnosticSeverity = (typeof LSP_DIAGNOSTIC_SEVERITIES)[number]
 
-/** Identifies a standard tag assigned to a diagnostic. */
-export type LSPDiagnosticTag = 1 | 2
+/** Identifies a standard tag assigned to a diagnostic, derived from {@link LSP_DIAGNOSTIC_TAGS}. */
+export type LSPDiagnosticTag = (typeof LSP_DIAGNOSTIC_TAGS)[number]
 
 /** Describes the external resource that explains a diagnostic code. */
 export interface LSPCodeDescription {
@@ -138,8 +144,8 @@ export type LSPDocumentDiagnosticReport =
 /** Identifies a position encoding selected by a language server. */
 export type LSPPositionEncoding = string
 
-/** Identifies the text synchronization mode selected by a language server. */
-export type LSPTextDocumentSyncKind = 0 | 1 | 2
+/** Identifies the text synchronization mode selected by a language server, derived from {@link LSP_SYNC_KINDS}. */
+export type LSPTextDocumentSyncKind = (typeof LSP_SYNC_KINDS)[number]
 
 /** Describes the text synchronization features selected by a language server. */
 export interface LSPTextDocumentSyncOptions {
@@ -253,6 +259,21 @@ export type LSPClientLifecycle =
 	| { readonly phase: 'destroying'; readonly promise: Promise<void>; readonly generation?: number }
 	| { readonly phase: 'destroyed' }
 
+/**
+ * Describes one settlement record a client holds for an operation awaiting its outcome.
+ *
+ * @remarks
+ * A request entry and a diagnostics publication entry carry the same members, so one record type
+ * describes both. `signal` and `abort` are the pair the client removes when the entry
+ * settles, so a settled operation leaves no listener on the signal that bounded it.
+ */
+export interface LSPPending<T> {
+	readonly resolve: (value: T) => void
+	readonly reject: (reason?: unknown) => void
+	readonly signal: AbortSignal
+	readonly abort: () => void
+}
+
 /** Maps client event names to their listener arguments. */
 export type LSPClientEventMap = {
 	readonly notification: readonly [message: JSONRPCNotification]
@@ -329,16 +350,8 @@ export interface LSPClientInterface {
 	destroy(): Promise<void>
 }
 
-/** Identifies a stable package failure category. */
-export type LSPErrorCode =
-	| 'spawn'
-	| 'framing'
-	| 'protocol'
-	| 'duplicate'
-	| 'server'
-	| 'timeout'
-	| 'aborted'
-	| 'closed'
+/** Identifies a stable package failure category, derived from {@link LSP_ERROR_CODES}. */
+export type LSPErrorCode = (typeof LSP_ERROR_CODES)[number]
 
 /** Describes structured details attached to an {@link LSPError}. */
 export interface LSPErrorContext {

@@ -339,6 +339,7 @@ The client surface provides these entities and configuration contracts:
 | `LSPClientCapabilities` | interface | Describes the capabilities advertised during initialization.                                      |
 | `LSPTransportInterface` | interface | Defines the readonly `emitter` property and the byte transport methods.                           |
 | `LSPTransportEventMap`  | type      | Maps byte chunks, exits, and errors to transport listeners.                                       |
+| `LSPPending`            | interface | Describes a settlement record held for an operation awaiting its outcome.                         |
 
 The framing, timing, and error surface provides these exports:
 
@@ -418,6 +419,9 @@ The validation surface provides these guards:
 | `isLSPPublishDiagnosticsParams` | function | Checks pushed diagnostic parameters.     |
 | `isLSPDocumentDiagnosticReport` | function | Checks a diagnostic report.              |
 | `isLSPIdentity`                 | function | Checks a peer identity.                  |
+| `isLSPDiagnosticSeverity`       | const    | Checks a diagnostic severity.            |
+| `isLSPDiagnosticTag`            | const    | Checks a diagnostic tag.                 |
+| `isLSPTextDocumentSyncKind`     | const    | Checks a text synchronization mode.      |
 | `isLSPTextDocumentSyncOptions`  | function | Checks expanded synchronization options. |
 | `isLSPDiagnosticOptions`        | function | Checks diagnostic provider options.      |
 | `isLSPServerCapabilities`       | function | Checks server capabilities.              |
@@ -425,20 +429,24 @@ The validation surface provides these guards:
 
 The constant surface provides these protocol names, advertisements, and limits:
 
-| Export                     | Kind  | Purpose                                                       |
-| -------------------------- | ----- | ------------------------------------------------------------- |
-| `LSP_METHODS`              | const | Names the protocol methods that the client sends or consumes. |
-| `LSP_ENCODINGS`            | const | Lists protocol position encodings.                            |
-| `LSP_CAPABILITIES`         | const | Describes the capabilities the client advertises.             |
-| `LSP_TIMEOUT`              | const | Names the default request-settlement timeout in milliseconds. |
-| `JSONRPC_PARSE_ERROR`      | const | Identifies a malformed JSON payload.                          |
-| `JSONRPC_INVALID_REQUEST`  | const | Identifies a structurally invalid request.                    |
-| `JSONRPC_METHOD_NOT_FOUND` | const | Identifies an unsupported method.                             |
-| `JSONRPC_INVALID_PARAMS`   | const | Identifies invalid method parameters.                         |
-| `JSONRPC_INTERNAL_ERROR`   | const | Identifies a receiver failure.                                |
-| `LSP_REQUEST_CANCELLED`    | const | Identifies a client-cancelled request.                        |
-| `LSP_CONTENT_MODIFIED`     | const | Identifies a request invalidated by content changes.          |
-| `LSP_SERVER_CANCELLED`     | const | Identifies a server-cancelled request.                        |
-| `LSP_REQUEST_FAILED`       | const | Identifies a request that could not complete.                 |
-| `LSP_CONTENT_LIMIT`        | const | Bounds an accepted content body.                              |
-| `LSP_HEADER_LIMIT`         | const | Bounds an accepted framing header.                            |
+| Export                      | Kind  | Purpose                                                       |
+| --------------------------- | ----- | ------------------------------------------------------------- |
+| `LSP_METHODS`               | const | Names the protocol methods that the client sends or consumes. |
+| `LSP_ENCODINGS`             | const | Lists protocol position encodings.                            |
+| `LSP_ERROR_CODES`           | const | Lists the failure categories an `LSPError` carries.           |
+| `LSP_DIAGNOSTIC_SEVERITIES` | const | Lists the protocol diagnostic severities.                     |
+| `LSP_DIAGNOSTIC_TAGS`       | const | Lists the protocol diagnostic tags.                           |
+| `LSP_SYNC_KINDS`            | const | Lists the protocol text synchronization modes.                |
+| `LSP_CAPABILITIES`          | const | Describes the capabilities the client advertises.             |
+| `LSP_TIMEOUT`               | const | Names the default request-settlement timeout in milliseconds. |
+| `JSONRPC_PARSE_ERROR`       | const | Identifies a malformed JSON payload.                          |
+| `JSONRPC_INVALID_REQUEST`   | const | Identifies a structurally invalid request.                    |
+| `JSONRPC_METHOD_NOT_FOUND`  | const | Identifies an unsupported method.                             |
+| `JSONRPC_INVALID_PARAMS`    | const | Identifies invalid method parameters.                         |
+| `JSONRPC_INTERNAL_ERROR`    | const | Identifies a receiver failure.                                |
+| `LSP_REQUEST_CANCELLED`     | const | Identifies a client-cancelled request.                        |
+| `LSP_CONTENT_MODIFIED`      | const | Identifies a request invalidated by content changes.          |
+| `LSP_SERVER_CANCELLED`      | const | Identifies a server-cancelled request.                        |
+| `LSP_REQUEST_FAILED`        | const | Identifies a request that could not complete.                 |
+| `LSP_CONTENT_LIMIT`         | const | Bounds an accepted content body.                              |
+| `LSP_HEADER_LIMIT`          | const | Bounds an accepted framing header.                            |

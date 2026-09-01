@@ -1,5 +1,6 @@
 import type { LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
 import { holds, isError } from '@orkestrel/contract'
+import { LSP_ERROR_CODES } from './constants.js'
 
 /** Reports a package failure with a stable machine-readable category. */
 export class LSPError extends Error {
@@ -25,6 +26,10 @@ export class LSPError extends Error {
 /**
  * Checks whether an unknown value is a branded package error.
  *
+ * @remarks
+ * The accepted categories are read from {@link LSP_ERROR_CODES}, so the guard and the
+ * {@link LSPErrorCode} union cannot disagree about which codes this package declares.
+ *
  * @param value - The value to inspect.
  * @returns True if the value is an LSP error; false otherwise.
  *
@@ -42,14 +47,7 @@ export function isLSPError(value: unknown): value is LSPError {
 		return (
 			value.name === 'LSPError' &&
 			Object.getOwnPropertyDescriptor(value, Symbol.for('@orkestrel/lsp.error'))?.value === true &&
-			(code === 'spawn' ||
-				code === 'framing' ||
-				code === 'protocol' ||
-				code === 'duplicate' ||
-				code === 'server' ||
-				code === 'timeout' ||
-				code === 'aborted' ||
-				code === 'closed')
+			LSP_ERROR_CODES.some((declared) => declared === code)
 		)
 	})
 }
