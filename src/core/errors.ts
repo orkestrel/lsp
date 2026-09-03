@@ -2,7 +2,19 @@ import type { LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
 import { holds, isError } from '@orkestrel/contract'
 import { LSP_ERROR_CODES } from './constants.js'
 
-/** Reports a package failure with a stable machine-readable category. */
+/**
+ * Reports a package failure with a stable machine-readable category.
+ *
+ * @example
+ * ```ts
+ * const error = new LSPError('The LSP header requires Content-Length', {
+ * 	code: 'framing',
+ * 	context: { value: 0 },
+ * })
+ * error.code // 'framing'
+ * isLSPError(error) // true
+ * ```
+ */
 export class LSPError extends Error {
 	override readonly name = 'LSPError'
 	readonly code: LSPErrorCode

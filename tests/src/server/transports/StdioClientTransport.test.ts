@@ -1,7 +1,7 @@
 import type { LSPExit } from '@src/core'
 import { encodeLSPMessage, isLSPError } from '@src/core'
 import { StdioClientTransport } from '@src/server'
-import { createRecorder, waitForCondition } from '@orkestrel/test'
+import { createRecorder, requireValue, waitForCondition } from '@orkestrel/test'
 import { createScratch, destroyScratch, isRunning } from '@orkestrel/test/server'
 import {
 	FIXTURE_AMBIENT,
@@ -23,12 +23,53 @@ import { describe, expect, it } from 'vitest'
 // the wait family's one-second default on a loaded host, so every peer wait carries this budget.
 const PEER = { budget: 5_000 }
 
+// A listener that always throws, so the `error` handler the options thread has a real throw to
+// receive. It sits at module scope because a function declared inside a case is refused.
+function throwListenerFault(): void {
+	throw new Error('the chunk listener threw')
+}
+
 const PING = encodeLSPMessage({ jsonrpc: '2.0', method: 'probe/ping' })
 const ECHO = encodeLSPMessage({ jsonrpc: '2.0', id: 1, method: 'probe/echo', params: {} })
 const HOLD = encodeLSPMessage({ jsonrpc: '2.0', id: 2, method: 'probe/hold', params: {} })
 const ORPHAN = encodeLSPMessage({ jsonrpc: '2.0', id: 3, method: 'probe/orphan', params: {} })
 
 describe('StdioClientTransport', () => {
+	it('wires the configured listeners and error handler at construction', async () => {
+		const chunks = createRecorder<[Uint8Array]>()
+		const transport = new StdioClientTransport({
+			...createPeerOptions(),
+			on: { chunk: chunks.handler },
+		})
+		await transport.start()
+		try {
+			// Nothing subscribed through `transport.emitter`, so a ready frame reaching this listener
+			// proves `on` installed it before the spawn could produce a chunk.
+			await waitForCondition('the peer ready frame', () => chunks.count >= 1, PEER)
+		} finally {
+			await transport.close()
+		}
+
+		const faults = createRecorder<[unknown, string]>()
+		const faulty = new StdioClientTransport({
+			...createPeerOptions(),
+			on: { chunk: throwListenerFault },
+			error: faults.handler,
+		})
+		await faulty.start()
+		try {
+			await waitForCondition('the listener fault report', () => faults.count >= 1, PEER)
+			const [fault, event] = requireValue(
+				faults.calls[0],
+				'the transport reported no listener fault',
+			)
+			expect(fault instanceof Error ? fault.message : undefined).toBe('the chunk listener threw')
+			expect(event).toBe('chunk')
+		} finally {
+			await faulty.close()
+		}
+	}, 15_000)
+
 	it('rejects an empty command as a spawn failure', async () => {
 		const transport = new StdioClientTransport({ server: { command: [] } })
 		const fault = await transport.start().then(

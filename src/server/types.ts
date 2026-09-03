@@ -1,9 +1,15 @@
-import type { LSPTransportInterface } from '@src/core'
+import type { EmitterErrorHandler, EmitterHooks } from '@orkestrel/emitter'
+import type { LSPTransportEventMap, LSPTransportInterface } from '@src/core'
 
 /**
  * Configures a Language Server Protocol child process reached over its standard streams.
  *
  * @remarks
+ * `on` wires initial listeners at construction, before the first `start` can spawn a child, so the
+ * first chunk that child produces already has somewhere to go. `error` receives a listener throw;
+ * the emitter isolates each listener and reports the throw there rather than rethrowing it, and a
+ * transport configured without `error` swallows it.
+ *
  * `server.command` is the child's argument vector: its first element names the executable and the
  * rest are its arguments, so a launcher and its target stay one value and no shell splits them.
  * `server.directory` is the child's working directory, and the current one applies when it is
@@ -25,6 +31,8 @@ import type { LSPTransportInterface } from '@src/core'
  * child is still live is refused with an `LSPError` whose `code` property is `duplicate`.
  */
 export interface StdioClientTransportOptions {
+	readonly on?: EmitterHooks<LSPTransportEventMap>
+	readonly error?: EmitterErrorHandler
 	readonly server: {
 		readonly command: readonly string[]
 		readonly directory?: string

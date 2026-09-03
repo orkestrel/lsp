@@ -6,18 +6,9 @@
 // exit. Passing `--stubborn` makes the peer ignore both the cooperative stdin close and `SIGTERM`,
 // which is the case a grace window must escalate past.
 
+import { frame, listen, reply } from './protocol.mjs'
+
 const stubborn = process.argv.includes('--stubborn')
-
-let pending = Buffer.alloc(0)
-
-function frame(message) {
-	const body = Buffer.from(JSON.stringify(message), 'utf8')
-	return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'utf8'), body])
-}
-
-function reply(message) {
-	process.stdout.write(frame(message))
-}
 
 function replySplit(message) {
 	const bytes = frame(message)
@@ -63,28 +54,7 @@ function handle(message) {
 	}
 }
 
-function drain() {
-	for (;;) {
-		const boundary = pending.indexOf('\r\n\r\n')
-		if (boundary < 0) return
-		const header = pending.subarray(0, boundary).toString('utf8')
-		const declared = /content-length:\s*(\d+)/i.exec(header)
-		if (declared === null) {
-			pending = pending.subarray(boundary + 4)
-			continue
-		}
-		const length = Number(declared[1])
-		if (pending.length < boundary + 4 + length) return
-		const body = pending.subarray(boundary + 4, boundary + 4 + length).toString('utf8')
-		pending = pending.subarray(boundary + 4 + length)
-		handle(JSON.parse(body))
-	}
-}
-
-process.stdin.on('data', (chunk) => {
-	pending = Buffer.concat([pending, chunk])
-	drain()
-})
+listen(handle)
 
 if (stubborn) {
 	process.on('SIGTERM', () => undefined)

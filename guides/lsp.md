@@ -1,7 +1,12 @@
 # Language Server Protocol client
 
-The core package provides host-independent Language Server Protocol framing, validation, and a
-document-oriented client over an injected byte transport.
+> A typed Language Server Protocol client over an injected byte transport. The host-independent
+> core owns the base-protocol framing codec, the JSON-RPC and protocol guards, and `LSPClient`,
+> which completes the initialize handshake, owns opened document URIs, and selects pull or push
+> diagnostics from the server's own capabilities. The server environment adds
+> `StdioClientTransport`, the byte transport over a language server run as a child process. Source:
+> [`src/core`](../src/core), [`src/server`](../src/server). Published through `@orkestrel/lsp` and
+> `@orkestrel/lsp/server`.
 
 ## Client lifecycle
 
@@ -114,6 +119,10 @@ its pipe and stall.
 are its arguments, so a launcher and its target stay one value and no shell splits them.
 `server.directory` is the child's working directory, and `server.environment` is its complete
 environment; the current directory and this process's environment apply when either is absent.
+
+`on` and `error` configure the transport's emitter at construction. `on` installs its listeners
+before the first `start()` call can spawn a child, so the first chunk that child produces already
+has somewhere to go, and `error` receives a listener throw that the emitter would otherwise swallow.
 
 ```ts
 import { createLSPClient } from '@orkestrel/lsp'
@@ -297,12 +306,12 @@ form matching the client's advertised capability.
 
 The client interface exposes these behavioral methods:
 
-| Method    | Signature                                                                                         | Behavior                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `start`   | `start(): Promise<void>`                                                                          | Starts or restarts a transport generation and completes its initialize handshake.        |
-| `open`    | `open(document: LSPTextDocumentItem, options: LSPOpenOptions): Promise<readonly LSPDiagnostic[]>` | Opens a document and waits for diagnostics under the required `options` signal.          |
-| `close`   | `close(uri: LSPDocumentURI): Promise<void>`                                                       | Notifies the peer that an owned document closed.                                         |
-| `destroy` | `destroy(): Promise<void>`                                                                        | Drains work, performs bounded protocol and transport teardown, and destroys the emitter. |
+| Method    | Signature                                                                                         | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `start`   | `start(): Promise<void>`                                                                          | Starts or restarts a transport generation and completes its initialize handshake. It rejects coded `closed` when the client is destroying or destroyed, when its generation is superseded, and when a handshake message cannot be written; coded `spawn` when the transport cannot start; coded `protocol` on an invalid initialize result or an unadvertised position encoding; and coded `timeout` when the initialize request passes the configured `timeout`. |
+| `open`    | `open(document: LSPTextDocumentItem, options: LSPOpenOptions): Promise<readonly LSPDiagnostic[]>` | Opens a document and waits for diagnostics under the required `options` signal.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `close`   | `close(uri: LSPDocumentURI): Promise<void>`                                                       | Notifies the peer that an owned document closed and releases the URI. It throws coded `closed` when the client is not ready and when the notification cannot be written, and coded `protocol` when the URI is not open, and it rejects a diagnostics wait still pending for that URI coded `closed`.                                                                                                                                                              |
+| `destroy` | `destroy(): Promise<void>`                                                                        | Drains work, performs bounded protocol and transport teardown, and destroys the emitter.                                                                                                                                                                                                                                                                                                                                                                          |
 
 #### `LSPTransportInterface`
 
@@ -323,7 +332,7 @@ The server surface provides these exports:
 | `StdioClientTransport`          | class     | Implements the byte transport over a language server child process.           |
 | `createStdioClientTransport`    | function  | Creates a `StdioClientTransportInterface` from `StdioClientTransportOptions`. |
 | `StdioClientTransportInterface` | interface | Defines the readonly `pid` property beside the byte transport surface.        |
-| `StdioClientTransportOptions`   | interface | Configures the child's command, directory, environment, and grace window.     |
+| `StdioClientTransportOptions`   | interface | Configures the transport's event hooks and the child's command and window.    |
 
 The client surface provides these entities and configuration contracts:
 

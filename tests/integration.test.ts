@@ -8,12 +8,12 @@ import {
 	OXLINT_FILES,
 	createOxlintOptions,
 	waitForReaped,
-} from '../../setupServer.js'
+} from './setupServer.js'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-describe('src server oxlint receipt', () => {
+describe('core client over the server stdio transport', () => {
 	// Spawning an interpreter, loading the linter, linting a document, and tearing the session down
 	// are four real host operations, so this budget is sized for a contended run rather than an
 	// idle one.

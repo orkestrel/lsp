@@ -4,7 +4,8 @@ import { StdioClientTransport } from './transports/StdioClientTransport.js'
 /**
  * Creates a byte transport over a Language Server Protocol child process.
  *
- * @param options - The child's command, working directory, environment, and grace window.
+ * @param options - The child's initial event hooks, listener-error handler, command, working
+ * directory, environment, and grace window.
  * @returns A transport that spawns the configured server and carries its stdio bytes.
  *
  * @example

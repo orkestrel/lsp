@@ -12,8 +12,8 @@ import {
 	readProperty,
 	readStructure,
 } from './setupConformance.js'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { createScratch, destroyScratch } from '@orkestrel/test/server'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('conformance infrastructure', () => {
@@ -69,21 +69,19 @@ describe('conformance infrastructure', () => {
 		expect(formatConformanceValue(9007199254740993n)).toBe('9007199254740993')
 	})
 
-	it('refuses a byte-perturbed mirror copy before parsing', () => {
-		const temporary = resolve('tmp')
-		mkdirSync(temporary, { recursive: true })
-		const directory = mkdtempSync(join(temporary, 'conformance-'))
+	it('refuses a byte-perturbed mirror copy before parsing', async () => {
+		const scratch = createScratch({ prefix: 'conformance-' })
 		try {
-			const path = join(directory, 'metaModel.json')
-			const bytes = readFileSync(META_MODEL_PATH)
-			const copy = Buffer.from(bytes)
-			copy[0] = copy[0] === 123 ? 91 : 123
-			writeFileSync(path, copy)
+			const text = readFileSync(META_MODEL_PATH, 'utf8')
+			const path = scratch.write(
+				'metaModel.json',
+				`${text.startsWith('{') ? '[' : '{'}${text.slice(1)}`,
+			)
 			expect(() => readMetaModel(path, META_MODEL_DIGEST)).toThrow(
 				`metaModel bytes drifted; SHA-256=${META_MODEL_DIGEST}`,
 			)
 		} finally {
-			rmSync(directory, { recursive: true, force: true })
+			await destroyScratch(scratch)
 		}
 	})
 

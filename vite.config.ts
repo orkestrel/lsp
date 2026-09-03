@@ -168,6 +168,16 @@ export const distribution = (): UserConfig => ({
 	},
 })
 
+export const integration = (): UserConfig => ({
+	resolve,
+	test: {
+		name: { label: 'integration', color: 'blue' },
+		include: ['tests/integration.test.ts'],
+		setupFiles: ['./tests/setup.ts'],
+		environment: 'node',
+	},
+})
+
 // A workbench, not a proof. No gate selects this project. Run in test mode by the
 // `test:probe` script, it collects `tmp/probe/**/*.test.ts`. Run in benchmark mode by the
 // `test:bench` script, the same workbench also collects `tests/**/*.test.ts` for a `bench` block,
@@ -190,6 +200,17 @@ export const probe = (): UserConfig => ({
 export default defineConfig({
 	resolve,
 	test: {
-		projects: [srcCore, srcServer, policy, config, setup, guides, conformance, distribution, probe],
+		projects: [
+			srcCore,
+			srcServer,
+			policy,
+			config,
+			setup,
+			guides,
+			conformance,
+			distribution,
+			integration,
+			probe,
+		],
 	},
 })

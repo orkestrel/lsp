@@ -27,6 +27,14 @@ class WireRange {
 	readonly end = { line: 0, character: 4 }
 }
 
+// Carries the name and the declared code of a package error on a real subclass of `Error`, and
+// carries no brand. It clears every guard check that precedes the brand check, so only the brand
+// check can refuse it.
+class LookalikeError extends Error {
+	override readonly name = 'LSPError'
+	readonly code = 'framing'
+}
+
 describe('JSON-RPC guards', () => {
 	it('accepts each envelope arm and refuses overlapping arms', () => {
 		expect(isJSONRPCRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).toBe(true)
@@ -156,10 +164,17 @@ describe('LSP wire guards', () => {
 			context: { code: -32700 },
 		})
 		expect(isLSPError(error)).toBe(true)
+		expect(error.code).toBe('framing')
 		expect(error.context).toEqual({ code: -32700 })
 		expect(isLSPError(new Error('Invalid frame'))).toBe(false)
 		expect(isLSPError({ name: 'LSPError', code: 'framing' })).toBe(false)
 		expect(isLSPError(null)).toBe(false)
+		expect(isLSPError(new LookalikeError('Invalid frame'))).toBe(false)
+		// The brand is installed non-configurable, so the code-membership vector redefines `code`,
+		// which the constructor assigns as an ordinary writable data property.
+		const miscoded = new LSPError('Invalid frame', { code: 'framing' })
+		Object.defineProperty(miscoded, 'code', { value: 'invented' })
+		expect(isLSPError(miscoded)).toBe(false)
 	})
 })
 

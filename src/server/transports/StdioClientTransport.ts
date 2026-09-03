@@ -42,7 +42,7 @@ import { createSession } from '@orkestrel/process/server'
  * ```
  */
 export class StdioClientTransport implements StdioClientTransportInterface {
-	readonly #emitter = new Emitter<LSPTransportEventMap>()
+	readonly #emitter: Emitter<LSPTransportEventMap>
 	readonly #command: readonly string[]
 	readonly #directory: string | undefined
 	readonly #environment: Readonly<Record<string, string | undefined>> | undefined
@@ -55,9 +55,14 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	/**
 	 * Creates a stdio transport over the configured child process.
 	 *
-	 * @param options - The child's command, working directory, environment, and grace window.
+	 * @param options - The child's initial event hooks, listener-error handler, command, working
+	 * directory, environment, and grace window.
 	 */
 	constructor(options: StdioClientTransportOptions) {
+		this.#emitter = new Emitter<LSPTransportEventMap>({
+			...(options.on === undefined ? {} : { on: options.on }),
+			...(options.error === undefined ? {} : { error: options.error }),
+		})
 		this.#command = Object.freeze([...options.server.command])
 		this.#directory = options.server.directory
 		this.#environment =

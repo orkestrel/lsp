@@ -15,6 +15,7 @@
 // A grandchild whose release file never appears exits on its own deadline, so a failed run leaves
 // no process behind.
 
+import { frame, listen, reply } from './protocol.mjs'
 import { spawn } from 'node:child_process'
 
 const release = process.argv[2]
@@ -23,17 +24,6 @@ const release = process.argv[2]
 // behaviour to offer. Refusing here reports that at the launch rather than letting a stand-in empty
 // path make the grandchild release itself immediately.
 if (release === undefined) throw new Error('the holder fixture requires a release path argument')
-
-let pending = Buffer.alloc(0)
-
-function frame(message) {
-	const body = Buffer.from(JSON.stringify(message), 'utf8')
-	return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'utf8'), body])
-}
-
-function reply(message) {
-	process.stdout.write(frame(message))
-}
 
 function hold() {
 	const bytes = frame({
@@ -45,9 +35,9 @@ function hold() {
 		`const bytes = Buffer.from(${JSON.stringify(bytes)}, 'base64')`,
 		`const release = ${JSON.stringify(release)}`,
 		"const fs = require('node:fs')",
-		'const started = Date.now()',
+		'const started = performance.now()',
 		'const timer = setInterval(() => {',
-		'  if (!fs.existsSync(release) && Date.now() - started < 15000) return',
+		'  if (!fs.existsSync(release) && performance.now() - started < 15000) return',
 		'  clearInterval(timer)',
 		'  process.stdout.write(bytes)',
 		'  process.exit(0)',
@@ -81,28 +71,7 @@ function handle(message) {
 	})
 }
 
-function drain() {
-	for (;;) {
-		const boundary = pending.indexOf('\r\n\r\n')
-		if (boundary < 0) return
-		const header = pending.subarray(0, boundary).toString('utf8')
-		const declared = /content-length:\s*(\d+)/i.exec(header)
-		if (declared === null) {
-			pending = pending.subarray(boundary + 4)
-			continue
-		}
-		const length = Number(declared[1])
-		if (pending.length < boundary + 4 + length) return
-		const body = pending.subarray(boundary + 4, boundary + 4 + length).toString('utf8')
-		pending = pending.subarray(boundary + 4 + length)
-		handle(JSON.parse(body))
-	}
-}
-
-process.stdin.on('data', (chunk) => {
-	pending = Buffer.concat([pending, chunk])
-	drain()
-})
+listen(handle)
 
 process.stdin.on('end', () => process.exit(0))
 

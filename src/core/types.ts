@@ -80,7 +80,11 @@ export interface LSPTextDocumentIdentifier {
 	readonly uri: LSPDocumentURI
 }
 
-/** Describes the complete text and identity of a document being opened. */
+/**
+ * Describes the complete text and identity of a document being opened.
+ *
+ * @remarks Transliterates the Language Server Protocol `TextDocumentItem` field for field.
+ */
 export interface LSPTextDocumentItem {
 	readonly uri: LSPDocumentURI
 	readonly languageId: string
@@ -125,14 +129,24 @@ export interface LSPPublishDiagnosticsParams {
 	readonly diagnostics: readonly LSPDiagnostic[]
 }
 
-/** Describes a request for diagnostics from one document. */
+/**
+ * Describes a request for diagnostics from one document.
+ *
+ * @remarks Transliterates the Language Server Protocol `DocumentDiagnosticParams` field for field.
+ */
 export interface LSPDocumentDiagnosticParams {
 	readonly textDocument: LSPTextDocumentIdentifier
 	readonly identifier?: string
 	readonly previousResultId?: string
 }
 
-/** Describes a complete or unchanged document diagnostic report. */
+/**
+ * Describes a complete or unchanged document diagnostic report.
+ *
+ * @remarks Transliterates the Language Server Protocol `DocumentDiagnosticReport` union field for
+ * field, so the `kind` discriminant carries the protocol's own field name rather than this
+ * package's.
+ */
 export type LSPDocumentDiagnosticReport =
 	| {
 			readonly kind: 'full'
@@ -147,7 +161,12 @@ export type LSPPositionEncoding = string
 /** Identifies the text synchronization mode selected by a language server, derived from {@link LSP_SYNC_KINDS}. */
 export type LSPTextDocumentSyncKind = (typeof LSP_SYNC_KINDS)[number]
 
-/** Describes the text synchronization features selected by a language server. */
+/**
+ * Describes the text synchronization features selected by a language server.
+ *
+ * @remarks Transliterates the Language Server Protocol `TextDocumentSyncOptions` members this
+ * client reads, field for field.
+ */
 export interface LSPTextDocumentSyncOptions {
 	readonly openClose?: boolean
 	readonly change?: LSPTextDocumentSyncKind
@@ -156,7 +175,11 @@ export interface LSPTextDocumentSyncOptions {
 /** Describes either compact or expanded text synchronization capabilities. */
 export type LSPTextDocumentSync = LSPTextDocumentSyncKind | LSPTextDocumentSyncOptions
 
-/** Describes the diagnostic provider features selected by a language server. */
+/**
+ * Describes the diagnostic provider features selected by a language server.
+ *
+ * @remarks Transliterates the Language Server Protocol `DiagnosticOptions` field for field.
+ */
 export interface LSPDiagnosticOptions {
 	readonly identifier?: string
 	readonly interFileDependencies: boolean
@@ -179,7 +202,12 @@ export interface LSPClientCapabilities {
 	}
 }
 
-/** Describes the initialization members sent by this client. */
+/**
+ * Describes the initialization members sent by this client.
+ *
+ * @remarks Transliterates the members of the Language Server Protocol `InitializeParams` this
+ * client sends, field for field.
+ */
 export interface LSPInitializeParams {
 	readonly processId: number | null
 	readonly clientInfo?: LSPIdentity
@@ -187,7 +215,12 @@ export interface LSPInitializeParams {
 	readonly capabilities: LSPClientCapabilities
 }
 
-/** Describes the known and extension capabilities returned by a language server. */
+/**
+ * Describes the known and extension capabilities returned by a language server.
+ *
+ * @remarks Transliterates the members of the Language Server Protocol `ServerCapabilities` this
+ * client reads, field for field, and carries every further capability under its index signature.
+ */
 export interface LSPServerCapabilities {
 	readonly positionEncoding?: LSPPositionEncoding
 	readonly textDocumentSync?: LSPTextDocumentSync
@@ -195,7 +228,11 @@ export interface LSPServerCapabilities {
 	readonly [capability: string]: unknown
 }
 
-/** Describes the successful result of an initialize request. */
+/**
+ * Describes the successful result of an initialize request.
+ *
+ * @remarks Transliterates the Language Server Protocol `InitializeResult` field for field.
+ */
 export interface LSPInitializeResult {
 	readonly capabilities: LSPServerCapabilities
 	readonly serverInfo?: LSPIdentity
@@ -320,6 +357,19 @@ export interface LSPClientInterface {
 	readonly emitter: EmitterInterface<LSPClientEventMap>
 	readonly capabilities: LSPServerCapabilities | undefined
 	readonly encoding: LSPPositionEncoding | undefined
+	/**
+	 * Starts or restarts a transport generation and completes its initialize handshake.
+	 *
+	 * @returns A promise that resolves after the server's initialize result is accepted and
+	 * `initialized` is written.
+	 * @throws An `LSPError`. Thrown when the client is destroying or destroyed and when its
+	 * generation is superseded, coded `closed`; when the transport cannot start, coded `spawn`; when
+	 * a handshake message cannot be written, coded `closed`; when the initialize result is invalid or
+	 * selects a position encoding this client does not advertise, coded `protocol`; and when the
+	 * initialize request passes the configured `timeout`, coded `timeout`.
+	 * @remarks A ready client resolves without work, and a concurrent call shares the handshake in
+	 * flight.
+	 */
 	start(): Promise<void>
 	/**
 	 * Opens a document and waits for diagnostics through the path selected from the server
@@ -338,6 +388,17 @@ export interface LSPClientInterface {
 	 * cancellation, the URI remains owned until `close` succeeds.
 	 */
 	open(document: LSPTextDocumentItem, options: LSPOpenOptions): Promise<readonly LSPDiagnostic[]>
+	/**
+	 * Notifies the server that an owned document closed and releases the URI.
+	 *
+	 * @param uri - The document URI this client opened.
+	 * @returns A promise that resolves after `textDocument/didClose` is written and the URI is
+	 * released.
+	 * @throws An `LSPError`. Thrown when the client is not ready and when the notification cannot be
+	 * written, coded `closed`; and when the URI is not open, coded `protocol`.
+	 * @remarks A diagnostics wait still pending for that URI is rejected with an `LSPError` coded
+	 * `closed`.
+	 */
 	close(uri: LSPDocumentURI): Promise<void>
 	/**
 	 * Tears down the client within the configured timeout.
