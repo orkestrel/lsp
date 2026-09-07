@@ -6,18 +6,18 @@ import { waitForCondition } from '@orkestrel/test'
 import { WORKSPACE_ROOT } from './setup.js'
 import { fileURLToPath } from 'node:url'
 
-/** The protocol-faithful child peer the server suite spawns. */
+/** Names the protocol-faithful child peer the server suite spawns. */
 export const FIXTURE_PEER = fileURLToPath(
 	new URL('tests/src/server/fixtures/peer.mjs', WORKSPACE_ROOT),
 )
 
-/** The child peer that hands its standard output to a pipe-holding grandchild. */
+/** Names the child peer that hands its standard output to a pipe-holding grandchild. */
 export const FIXTURE_HOLDER = fileURLToPath(
 	new URL('tests/src/server/fixtures/holder.mjs', WORKSPACE_ROOT),
 )
 
 /**
- * The value this process carries in `LSP_FIXTURE_AMBIENT` so a child can report what it inherited.
+ * Names the value this process carries in `LSP_FIXTURE_AMBIENT` so a child can report what it inherited.
  *
  * @remarks A host adds variables to a child's environment on its own account: Windows copies `PATH`,
  * `TEMP`, `USERPROFILE`, and the rest of its required set into every child whatever environment the
@@ -30,7 +30,7 @@ export const FIXTURE_AMBIENT = 'inherited'
 process.env.LSP_FIXTURE_AMBIENT = FIXTURE_AMBIENT
 
 /**
- * The exit a child reports on this host after a transport kills it.
+ * Names the exit a child reports on this host after a transport kills it.
  *
  * @remarks A POSIX host records the signal that ended the process and no exit code. Windows carries
  * no signal to record: `stopChild` ends the tree through the host's `taskkill` utility, and a
@@ -41,16 +41,16 @@ export const KILLED_EXIT: LSPExit = Object.freeze(
 	process.platform === 'win32' ? { code: 1, signal: null } : { code: null, signal: 'SIGKILL' },
 )
 
-/** The Oxlint entry the live receipt drives in its language-server mode. */
+/** Names the Oxlint entry the live receipt drives in its language-server mode. */
 export const OXLINT_ENTRY = fileURLToPath(new URL('node_modules/oxlint/bin/oxlint', WORKSPACE_ROOT))
 
-/** The document the Oxlint receipt opens, carrying exactly one rule violation. */
+/** Names the document the Oxlint receipt opens, carrying exactly one rule violation. */
 export const OXLINT_DOCUMENT = 'debugger\n'
 
-/** The rule the Oxlint receipt pins, reported as this diagnostic code. */
+/** Names the rule the Oxlint receipt pins, reported as this diagnostic code. */
 export const OXLINT_CODE = 'eslint(no-debugger)'
 
-/** The workspace the Oxlint receipt lints, pinned to one rule so its diagnostics stay fixed. */
+/** Names the workspace the Oxlint receipt lints, pinned to one rule so its diagnostics stay fixed. */
 export const OXLINT_FILES: Readonly<Record<string, string>> = Object.freeze({
 	'.oxlintrc.json': `${JSON.stringify({ rules: { 'no-debugger': 'error' } }, null, '\t')}\n`,
 	'main.js': OXLINT_DOCUMENT,

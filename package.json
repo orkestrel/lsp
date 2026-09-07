@@ -1,6 +1,6 @@
 {
 	"name": "@orkestrel/lsp",
-	"version": "0.0.6",
+	"version": "0.0.7",
 	"description": "A typed Language Server Protocol client over an injected byte transport — base-protocol framing, JSON-RPC and protocol guards, and a stdio child-process transport. Part of the @orkestrel line.",
 	"keywords": [
 		"diagnostics",
@@ -81,7 +81,8 @@
 		"build:src:core": "vite build --config configs/src/vite.core.config.ts && npm run copy dist/src/core/index.d.ts dist/src/core/index.d.cts",
 		"build:src:server": "vite build --config configs/src/vite.server.config.ts && npm run copy dist/src/server/index.d.ts dist/src/server/index.d.cts",
 		"prepack": "npm run build",
-		"prepublishOnly": "npm run format:check && npm run lint:check && npm run check && npm run build && npm test && npm run test:distribution -- --mode release"
+		"prepublishOnly": "npm run format:check && npm run lint:check && npm run check && npm run build && npm test && npm run test:distribution -- --mode release",
+		"docs": "node --experimental-strip-types scripts/docs.ts"
 	},
 	"dependencies": {
 		"@orkestrel/contract": "^0.0.16",
