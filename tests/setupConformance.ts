@@ -1,4 +1,5 @@
 import type { Guard } from '@orkestrel/contract'
+import type { ESTree } from 'vite'
 import type { LSPDiagnosticSeverity, LSPDiagnosticTag, LSPTextDocumentSyncKind } from '@src/core'
 import type { Diagnostic as InstalledDiagnostic } from 'vscode-languageserver-protocol'
 import {
@@ -27,14 +28,14 @@ import {
 	isLSPServerCapabilities,
 	isLSPTextDocumentSyncOptions,
 } from '@src/core'
-import { isRecord } from '@orkestrel/contract'
+import { isArray, isRecord } from '@orkestrel/contract'
 import { WORKSPACE_ROOT } from './setup.js'
 import { createHash } from 'node:crypto'
 import { globSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
+import { parseSync } from 'vite'
 import {
 	CodeDescription,
 	Diagnostic,
@@ -464,43 +465,69 @@ export function readProtocolSpecifier(specifier: string): string | undefined {
 }
 
 /**
- * Reads the first forbidden module specifier beneath one TypeScript syntax node.
+ * Checks whether a value is a syntax node the parser produced.
  *
- * @param node - The syntax node to walk, including its descendants.
- * @returns The first protocol-family specifier reached in source order, or `undefined` when the subtree names none.
- * @remarks The walk covers static imports and exports, import assignments, and dynamic `import()` calls.
+ * @param value - The candidate value reached beneath a parsed program.
+ * @returns True if the value is a record carrying a string `type` member; false otherwise.
  */
-export function readForbiddenNode(node: ts.Node): string | undefined {
-	if (
-		(ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-		node.moduleSpecifier !== undefined &&
-		ts.isStringLiteral(node.moduleSpecifier)
-	) {
-		return readProtocolSpecifier(node.moduleSpecifier.text)
+export function isSyntaxNode(value: unknown): value is ESTree.Node {
+	return isRecord(value) && typeof value.type === 'string'
+}
+
+/**
+ * Reads the module specifier one syntax node names.
+ *
+ * @param node - The syntax node to read, without its descendants.
+ * @returns The specifier written in that node's own import or export clause, or `undefined` when the node writes none.
+ * @remarks The forms read are an `import` declaration, an `export … from` or `export * from` re-export, an `import =` assignment over an external module reference, and an `import()` expression whose source is a string literal. An `import` declaration carries the static, type-only, and bare side-effect spellings alike, and a non-literal `import()` expression names no specifier.
+ */
+export function readNodeSpecifier(node: ESTree.Node): string | undefined {
+	switch (node.type) {
+		case 'ImportDeclaration':
+		case 'ExportAllDeclaration':
+			return node.source.value
+		case 'ExportNamedDeclaration':
+			return node.source === null ? undefined : node.source.value
+		case 'TSImportEqualsDeclaration':
+			return node.moduleReference.type === 'TSExternalModuleReference'
+				? node.moduleReference.expression.value
+				: undefined
+		case 'ImportExpression':
+			return node.source.type === 'Literal' && typeof node.source.value === 'string'
+				? node.source.value
+				: undefined
+		default:
+			return undefined
 	}
-	if (
-		ts.isImportEqualsDeclaration(node) &&
-		ts.isExternalModuleReference(node.moduleReference) &&
-		node.moduleReference.expression !== undefined &&
-		ts.isStringLiteral(node.moduleReference.expression)
-	) {
-		return readProtocolSpecifier(node.moduleReference.expression.text)
-	}
-	if (
-		ts.isCallExpression(node) &&
-		node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-		node.arguments.length === 1
-	) {
-		const [argument] = node.arguments
-		if (argument !== undefined && ts.isStringLiteral(argument)) {
-			return readProtocolSpecifier(argument.text)
+}
+
+/**
+ * Reads the first forbidden module specifier beneath one parsed syntax node.
+ *
+ * @param node - The parsed program, one node beneath it, or any member reached from one.
+ * @returns The first protocol-family specifier reached in source order, or `undefined` when the subtree names none.
+ * @remarks The walk reads a node's own specifier first and decides a protocol-family hit there; otherwise it recurses through the node's arrays and records, so every form `readNodeSpecifier` reads is found wherever it is nested. The recursion skips a `parent` member, so a back-link the parser might populate cannot turn the tree into a cycle.
+ */
+export function readForbiddenNode(node: unknown): string | undefined {
+	if (isArray(node)) {
+		for (const element of node) {
+			const forbidden = readForbiddenNode(element)
+			if (forbidden !== undefined) return forbidden
 		}
+		return undefined
 	}
-	let forbidden: string | undefined = undefined
-	node.forEachChild((child) => {
-		if (forbidden === undefined) forbidden = readForbiddenNode(child)
-	})
-	return forbidden
+	if (!isRecord(node)) return undefined
+	if (isSyntaxNode(node)) {
+		const specifier = readNodeSpecifier(node)
+		const forbidden = specifier === undefined ? undefined : readProtocolSpecifier(specifier)
+		if (forbidden !== undefined) return forbidden
+	}
+	for (const [member, value] of Object.entries(node)) {
+		if (member === 'parent') continue
+		const forbidden = readForbiddenNode(value)
+		if (forbidden !== undefined) return forbidden
+	}
+	return undefined
 }
 
 /**
@@ -509,14 +536,17 @@ export function readForbiddenNode(node: ts.Node): string | undefined {
  * @param source - The TypeScript source text to parse.
  * @param name - The filename the parser reports for that text. Default: `'source.ts'`.
  * @returns The first protocol-family specifier reached in source order, or `undefined` when the text names none.
+ * @throws Thrown when the parser reports an error-severity diagnostic, naming the file and that diagnostic's message.
+ * @remarks A `require('vscode-jsonrpc')` call and a non-literal `import()` expression are outside the forms this reader detects, so source reaching the family either way reads as clean.
  */
 export function readForbiddenImport(
 	source: string,
 	name: string = 'source.ts',
 ): string | undefined {
-	return readForbiddenNode(
-		ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS),
-	)
+	const parsed = parseSync(name, source)
+	const refusal = parsed.errors.find((error) => error.severity === 'Error')
+	if (refusal !== undefined) throw new Error(`The parser refused ${name}: ${refusal.message}`)
+	return readForbiddenNode(parsed.program)
 }
 
 /**
@@ -524,7 +554,7 @@ export function readForbiddenImport(
  *
  * @param root - The workspace root the published source glob resolves against.
  * @returns The offending `path:specifier` coordinate, or `undefined` when no published source names the family.
- * @throws Thrown when a globbed source file cannot be read.
+ * @throws Thrown when a globbed source file cannot be read, or when the parser reports an error for one.
  */
 export function readForbiddenSource(root: string): string | undefined {
 	for (const path of globSync(['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.mts', 'src/**/*.cts'], {
