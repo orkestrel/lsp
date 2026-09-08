@@ -340,11 +340,11 @@ The transport interface exposes these behavioral methods:
 
 The server surface provides these exports.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to.
+A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
 | Export                          | Kind      | Shape                                                                     | Summary                                                                                 |
 | ------------------------------- | --------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `StdioClientTransport`          | class     |                                                                           | Streams Language Server Protocol bytes between a client and a child process over stdio. |
+| `StdioClientTransport`          | class     | `StdioClientTransportInterface`                                           | Streams Language Server Protocol bytes between a client and a child process over stdio. |
 | `createStdioClientTransport`    | function  | `(options: StdioClientTransportOptions) => StdioClientTransportInterface` | Creates a byte transport over a Language Server Protocol child process.                 |
 | `StdioClientTransportInterface` | interface | `LSPTransportInterface plus { pid }`                                      | Defines the stdio transport's own surface beyond the byte transport it carries.         |
 | `StdioClientTransportOptions`   | interface | `{ on?, error?, server, grace? }`                                         | Configures a Language Server Protocol child process reached over its standard streams.  |
@@ -353,11 +353,11 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 The client surface provides these entities and configuration contracts.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to.
+A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
 | Export                  | Kind      | Shape                                                                                                                                                                                                 | Summary                                                                               |
 | ----------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `LSPClient`             | class     |                                                                                                                                                                                                       | Drives a Language Server Protocol peer through an injected byte transport.            |
+| `LSPClient`             | class     | `LSPClientInterface`                                                                                                                                                                                  | Drives a Language Server Protocol peer through an injected byte transport.            |
 | `createLSPClient`       | function  | `(options: LSPClientOptions) => LSPClientInterface`                                                                                                                                                   | Creates a transport-agnostic Language Server Protocol client.                         |
 | `LSPClientInterface`    | interface | `{ emitter, capabilities, encoding } plus start, open, close, destroy`                                                                                                                                | Defines the document-oriented behavior exposed by an LSP client.                      |
 | `LSPClientOptions`      | interface | `{ on?, error?, transport, workspace, timeout?, signal? }`                                                                                                                                            | Configures an LSP client and its transport.                                           |
@@ -373,7 +373,7 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 The framing, timing, and error surface provides these exports.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to.
+A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
 | Export             | Kind      | Shape                                                                                                                               | Summary                                                                                     |
 | ------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -386,7 +386,7 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 | `readLSPHeader`    | function  | `(header: Uint8Array, messages?: readonly JSONRPCMessage[]) => number`                                                              | Reads one base-protocol header block and returns the content length it declares.            |
 | `readLSPBody`      | function  | `(body: Uint8Array, messages?: readonly JSONRPCMessage[]) => JSONRPCMessage`                                                        | Reads one base-protocol content body as a validated JSON-RPC message.                       |
 | `waitForDeadline`  | function  | `(timeout: number) => Promise<void>`                                                                                                | Waits for a deadline to elapse without holding the host event loop open.                    |
-| `LSPError`         | class     |                                                                                                                                     | Reports a package failure with a stable machine-readable category.                          |
+| `LSPError`         | class     | `new (message: string, options: LSPErrorOptions) => LSPError`                                                                       | Reports a package failure with a stable machine-readable category.                          |
 | `isLSPError`       | function  | `LSPError`                                                                                                                          | Checks whether an unknown value is a branded package error.                                 |
 | `LSPErrorCode`     | type      | `'spawn' \| 'framing' \| 'protocol' \| 'duplicate' \| 'server' \| 'timeout' \| 'aborted' \| 'closed'`                               | Identifies a stable package failure category, derived from `LSP_ERROR_CODES`.               |
 | `LSPErrorContext`  | interface | `{ code?, messages?, value? }`                                                                                                      | Describes structured details attached to an `LSPError`.                                     |
@@ -446,7 +446,7 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 The validation surface provides these guards.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. In a guard table a `Shape` cell holds the type the guard narrows to.
+In a guard table a `Shape` cell holds the type the guard narrows to.
 
 | Export                          | Kind     | Shape                         | Summary                                                                         |
 | ------------------------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------- |
