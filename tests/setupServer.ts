@@ -17,13 +17,15 @@ export const FIXTURE_HOLDER = fileURLToPath(
 )
 
 /**
- * Names the value this process carries in `LSP_FIXTURE_AMBIENT` so a child can report what it inherited.
+ * Names the value this process carries in `LSP_FIXTURE_AMBIENT` so a child can report what it
+ * inherited.
  *
- * @remarks A host adds variables to a child's environment on its own account: Windows copies `PATH`,
- * `TEMP`, `USERPROFILE`, and the rest of its required set into every child whatever environment the
- * spawn configured, so `PATH` reports the same value there whether a spawn replaced the environment
- * or inherited it. No host injects this variable, so a child that reports it inherited the parent's
- * environment and a child that reports `null` received the configured environment alone.
+ * @remarks A host adds variables to a child's environment on its own account: Windows copies
+ * `PATH`, `TEMP`, `USERPROFILE`, and the rest of its required set into every child whatever
+ * environment the spawn configured, so `PATH` reports the same value there whether a spawn replaced
+ * the environment or inherited it. No host injects this variable, so a child that reports it
+ * inherited the parent's environment and a child that reports `null` received the configured
+ * environment alone.
  */
 export const FIXTURE_AMBIENT = 'inherited'
 
@@ -50,7 +52,9 @@ export const OXLINT_DOCUMENT = 'debugger\n'
 /** Names the rule the Oxlint receipt pins, reported as this diagnostic code. */
 export const OXLINT_CODE = 'eslint(no-debugger)'
 
-/** Names the workspace the Oxlint receipt lints, pinned to one rule so its diagnostics stay fixed. */
+/**
+ * Names the workspace the Oxlint receipt lints, pinned to one rule so its diagnostics stay fixed.
+ */
 export const OXLINT_FILES: Readonly<Record<string, string>> = Object.freeze({
 	'.oxlintrc.json': `${JSON.stringify({ rules: { 'no-debugger': 'error' } }, null, '\t')}\n`,
 	'main.js': OXLINT_DOCUMENT,
@@ -149,8 +153,8 @@ export function readPeerResult(messages: readonly JSONRPCMessage[], key: string)
  * @param key - The result member to read.
  * @returns The member's value.
  * @throws An `Error` naming the member when no result carried it as a number.
- * @remarks A caller that needs the value cannot proceed without it, so an absent or off-shape member
- * fails here rather than reaching an assertion as a stand-in number.
+ * @remarks A caller that needs the value cannot proceed without it, so an absent or off-shape
+ * member fails here rather than reaching an assertion as a stand-in number.
  */
 export function readPeerNumber(messages: readonly JSONRPCMessage[], key: string): number {
 	const value = readPeerResult(messages, key)

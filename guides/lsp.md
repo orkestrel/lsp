@@ -71,6 +71,7 @@ const diagnostics = await client.open(
 	},
 	{ signal },
 )
+for (const diagnostic of diagnostics) console.log(diagnostic.message)
 await client.close(uri)
 await client.destroy()
 ```
@@ -127,6 +128,8 @@ environment; the current directory and this process's environment apply when eit
 `on` and `error` configure the transport's emitter at construction. `on` installs its listeners
 before the first `start()` call can spawn a child, so the first chunk that child produces already
 has somewhere to go, and `error` receives a listener throw that the emitter would otherwise swallow.
+
+Spawn a language server as a child process and drive it through the stdio transport:
 
 ```ts
 import { createLSPClient } from '@orkestrel/lsp'
@@ -193,6 +196,8 @@ the buffer you passed, so a caller scanning a window adds the window's own offse
 `scanLSPBoundary()` returns the boundary's index, so `bytes.subarray(0, boundary)` is the block
 `readLSPHeader()` reads and the body starts at `boundary + 4`.
 
+Flatten a retained state, scan that buffer for the header boundary, and take the state's last bytes:
+
 ```ts
 import type { LSPDecodeState } from '@orkestrel/lsp'
 import { joinLSPSegments, scanLSPBoundary, takeLSPTail } from '@orkestrel/lsp'
@@ -209,6 +214,8 @@ reads one header block and returns the `Content-Length` it declares. `readLSPBod
 content bytes that length measures and returns the validated JSON-RPC message. Each refuses with an
 `LSPError`, and when you pass a `messages` argument it travels on that error's `context.messages`
 property, so a caller that has already decoded frames keeps them through a refusal.
+
+Encode one message, then read its declared length and its body back at the boundary offsets:
 
 ```ts
 import { encodeLSPMessage, readLSPBody, readLSPHeader, scanLSPBoundary } from '@orkestrel/lsp'
@@ -329,29 +336,29 @@ The transport interface exposes these behavioral methods:
 
 ## Surface
 
-### Stdio transport
+### Stdio client transport
 
-The server surface provides these exports:
+The server surface provides these exports.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after.
+A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to.
 
-| Export                          | Kind      | Shape                                | Summary                                                                                 |
-| ------------------------------- | --------- | ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `StdioClientTransport`          | class     |                                      | Streams Language Server Protocol bytes between a client and a child process over stdio. |
-| `createStdioClientTransport`    | function  |                                      | Creates a byte transport over a Language Server Protocol child process.                 |
-| `StdioClientTransportInterface` | interface | `LSPTransportInterface plus { pid }` | Defines the stdio transport's own surface beyond the byte transport it carries.         |
-| `StdioClientTransportOptions`   | interface | `{ on?, error?, server, grace? }`    | Configures a Language Server Protocol child process reached over its standard streams.  |
+| Export                          | Kind      | Shape                                                                     | Summary                                                                                 |
+| ------------------------------- | --------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `StdioClientTransport`          | class     |                                                                           | Streams Language Server Protocol bytes between a client and a child process over stdio. |
+| `createStdioClientTransport`    | function  | `(options: StdioClientTransportOptions) => StdioClientTransportInterface` | Creates a byte transport over a Language Server Protocol child process.                 |
+| `StdioClientTransportInterface` | interface | `LSPTransportInterface plus { pid }`                                      | Defines the stdio transport's own surface beyond the byte transport it carries.         |
+| `StdioClientTransportOptions`   | interface | `{ on?, error?, server, grace? }`                                         | Configures a Language Server Protocol child process reached over its standard streams.  |
 
-### Client
+### Client and transport contracts
 
-The client surface provides these entities and configuration contracts:
+The client surface provides these entities and configuration contracts.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
+A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to.
 
 | Export                  | Kind      | Shape                                                                                                                                                                                                 | Summary                                                                               |
 | ----------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `LSPClient`             | class     |                                                                                                                                                                                                       | Drives a Language Server Protocol peer through an injected byte transport.            |
-| `createLSPClient`       | function  |                                                                                                                                                                                                       | Creates a transport-agnostic Language Server Protocol client.                         |
+| `createLSPClient`       | function  | `(options: LSPClientOptions) => LSPClientInterface`                                                                                                                                                   | Creates a transport-agnostic Language Server Protocol client.                         |
 | `LSPClientInterface`    | interface | `{ emitter, capabilities, encoding } plus start, open, close, destroy`                                                                                                                                | Defines the document-oriented behavior exposed by an LSP client.                      |
 | `LSPClientOptions`      | interface | `{ on?, error?, transport, workspace, timeout?, signal? }`                                                                                                                                            | Configures an LSP client and its transport.                                           |
 | `LSPOpenOptions`        | interface | `{ signal }`                                                                                                                                                                                          | Configures a document inspection with the signal that bounds its diagnostics wait.    |
@@ -364,30 +371,30 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 ### Framing, timing, and errors
 
-The framing, timing, and error surface provides these exports:
+The framing, timing, and error surface provides these exports.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
+A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to.
 
-| Export             | Kind      | Shape                                                                                                 | Summary                                                                                     |
-| ------------------ | --------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `encodeLSPMessage` | function  |                                                                                                       | Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.                    |
-| `parseLSPMessages` | function  |                                                                                                       | Parses a byte chunk into complete LSP base-protocol messages and retained decode state.     |
-| `LSPDecodeState`   | type      | `{ bytes, previous?, size } \| { bytes, previous?, size, boundary, length }`                          | Retains incremental base-protocol bytes and resolved framing metadata between decode calls. |
-| `joinLSPSegments`  | function  |                                                                                                       | Flattens the retained segments of a decode state into one owned buffer.                     |
-| `takeLSPTail`      | function  |                                                                                                       | Takes the last retained bytes of a decode state as an owned buffer.                         |
-| `scanLSPBoundary`  | function  |                                                                                                       | Finds the first base-protocol header boundary in a flat buffer.                             |
-| `readLSPHeader`    | function  |                                                                                                       | Reads one base-protocol header block and returns the content length it declares.            |
-| `readLSPBody`      | function  |                                                                                                       | Reads one base-protocol content body as a validated JSON-RPC message.                       |
-| `waitForDeadline`  | function  |                                                                                                       | Waits for a deadline to elapse without holding the host event loop open.                    |
-| `LSPError`         | class     |                                                                                                       | Reports a package failure with a stable machine-readable category.                          |
-| `isLSPError`       | function  |                                                                                                       | Checks whether an unknown value is a branded package error.                                 |
-| `LSPErrorCode`     | type      | `'spawn' \| 'framing' \| 'protocol' \| 'duplicate' \| 'server' \| 'timeout' \| 'aborted' \| 'closed'` | Identifies a stable package failure category, derived from `LSP_ERROR_CODES`.               |
-| `LSPErrorContext`  | interface | `{ code?, messages?, value? }`                                                                        | Describes structured details attached to an `LSPError`.                                     |
-| `LSPErrorOptions`  | interface | `{ code, context?, cause? }`                                                                          | Configures an `LSPError` instance.                                                          |
+| Export             | Kind      | Shape                                                                                                                               | Summary                                                                                     |
+| ------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `encodeLSPMessage` | function  | `(message: JSONRPCMessage) => Uint8Array`                                                                                           | Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.                    |
+| `parseLSPMessages` | function  | `(chunk: Uint8Array, state?: LSPDecodeState) => readonly [messages: readonly JSONRPCMessage[], state: LSPDecodeState \| undefined]` | Parses a byte chunk into complete LSP base-protocol messages and retained decode state.     |
+| `LSPDecodeState`   | type      | `{ bytes, previous?, size } \| { bytes, previous?, size, boundary, length }`                                                        | Retains incremental base-protocol bytes and resolved framing metadata between decode calls. |
+| `joinLSPSegments`  | function  | `(state: LSPDecodeState) => Uint8Array`                                                                                             | Flattens the retained segments of a decode state into one owned buffer.                     |
+| `takeLSPTail`      | function  | `(state: LSPDecodeState, count: number) => Uint8Array`                                                                              | Takes the last retained bytes of a decode state as an owned buffer.                         |
+| `scanLSPBoundary`  | function  | `(bytes: Uint8Array) => number \| undefined`                                                                                        | Finds the first base-protocol header boundary in a flat buffer.                             |
+| `readLSPHeader`    | function  | `(header: Uint8Array, messages?: readonly JSONRPCMessage[]) => number`                                                              | Reads one base-protocol header block and returns the content length it declares.            |
+| `readLSPBody`      | function  | `(body: Uint8Array, messages?: readonly JSONRPCMessage[]) => JSONRPCMessage`                                                        | Reads one base-protocol content body as a validated JSON-RPC message.                       |
+| `waitForDeadline`  | function  | `(timeout: number) => Promise<void>`                                                                                                | Waits for a deadline to elapse without holding the host event loop open.                    |
+| `LSPError`         | class     |                                                                                                                                     | Reports a package failure with a stable machine-readable category.                          |
+| `isLSPError`       | function  | `LSPError`                                                                                                                          | Checks whether an unknown value is a branded package error.                                 |
+| `LSPErrorCode`     | type      | `'spawn' \| 'framing' \| 'protocol' \| 'duplicate' \| 'server' \| 'timeout' \| 'aborted' \| 'closed'`                               | Identifies a stable package failure category, derived from `LSP_ERROR_CODES`.               |
+| `LSPErrorContext`  | interface | `{ code?, messages?, value? }`                                                                                                      | Describes structured details attached to an `LSPError`.                                     |
+| `LSPErrorOptions`  | interface | `{ code, context?, cause? }`                                                                                                        | Configures an `LSPError` instance.                                                          |
 
 ### JSON-RPC and initialization
 
-The JSON-RPC and initialization surface provides these payload types:
+The JSON-RPC and initialization surface provides these payload types.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
 
@@ -409,7 +416,7 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 ### Documents and diagnostics
 
-The document and diagnostic surface provides these payload types:
+The document and diagnostic surface provides these payload types.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
 
@@ -437,7 +444,7 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 ### Guards
 
-The validation surface provides these guards:
+The validation surface provides these guards.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. In a guard table a `Shape` cell holds the type the guard narrows to.
 
@@ -466,7 +473,7 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 ### Constants
 
-The constant surface provides these protocol names, advertisements, and limits:
+The constant surface provides these protocol names, advertisements, and limits.
 
 A `Shape` cell holds the constant's declared type.
 

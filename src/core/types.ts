@@ -426,9 +426,10 @@ export interface LSPClientInterface {
 	 * Tears down the client within the configured timeout.
 	 *
 	 * @returns A promise that resolves after transport settlement and listener removal.
-	 * @remarks A close failure that settles before the deadline is emitted before the emitter is
-	 * destroyed. At the deadline, the client emits a coded `timeout` error and absorbs the later
-	 * close outcome.
+	 * @remarks Pending operations reject with an `LSPError` coded `closed` before the `shutdown`
+	 * request is written. A close failure that settles before the deadline is emitted before the
+	 * emitter is destroyed. At the deadline, the client emits a coded `timeout` error and absorbs the
+	 * later close outcome.
 	 */
 	destroy(): Promise<void>
 }

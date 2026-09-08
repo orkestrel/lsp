@@ -10,7 +10,7 @@
 let pending = Buffer.alloc(0)
 
 /**
- * Encodes a JSON-RPC message as one Content-Length base-protocol payload.
+ * Encodes a JSON-RPC message with its Content-Length header as one base-protocol buffer.
  *
  * @param {unknown} message - The JSON-RPC message to frame.
  * @returns {Buffer} The ASCII header and UTF-8 body as one buffer.

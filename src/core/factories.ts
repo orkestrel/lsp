@@ -33,6 +33,7 @@ import { LSPClient } from './LSPClient.js'
  * 	},
  * 	{ signal },
  * )
+ * for (const diagnostic of diagnostics) console.log(diagnostic.message)
  * await client.close(uri)
  * await client.destroy()
  * ```
