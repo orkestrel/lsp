@@ -1,14 +1,17 @@
 # @orkestrel/lsp
 
-A typed Language Server Protocol client over an injected byte transport. The
-host-independent core owns the base-protocol framing codec, the JSON-RPC and
-protocol guards, and `LSPClient`, which completes the initialize handshake, owns
-opened document URIs, and selects pull or push diagnostics from the server's own
-capabilities. The server environment adds `StdioClientTransport`, the byte
-transport over a language server run as a child process, with a bounded
-termination window that ends the child's whole tree. The client reaches its peer
-only through that seam, so any implementation of it drives the same client. Part
-of the `@orkestrel` line.
+> A typed Language Server Protocol client over an injected byte transport: a host-independent core
+> carrying the base-protocol framing codec, the JSON-RPC and protocol guards, and an `LSPClient`
+> that completes the initialize handshake, owns opened document URIs, and selects pull or push
+> diagnostics from the server's own capabilities, beside a server environment whose
+> `StdioClientTransport` carries those bytes over a language server run as a child process.
+
+Create a client with the `createLSPClient` function, hand it a transport, and
+call `start()` before you open a document. The client reaches its peer only
+through the transport it is handed, so any implementation of
+`LSPTransportInterface` drives the same client, and the stdio transport ends the
+child's whole tree inside a bounded termination window. Part of the `@orkestrel`
+line.
 
 ## Install
 

@@ -315,15 +315,14 @@ export function readLSPBody(
 }
 
 /**
- * Waits for a deadline to elapse.
+ * Waits for a deadline to elapse without holding the host event loop open.
  *
  * @param timeout - The number of milliseconds to wait.
  * @returns A promise that resolves after the deadline elapses, and never rejects.
  *
  * @remarks
- * The deadline is armed with `AbortSignal.timeout`, whose timer does not hold the host event loop
- * open. A caller that wins its race against this promise therefore has nothing to clear, and the
- * losing deadline delays no exit.
+ * The deadline is armed with `AbortSignal.timeout`. A caller that wins its race against this
+ * promise has nothing to clear, and the losing deadline delays no exit.
  *
  * @example
  * ```ts

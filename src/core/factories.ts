@@ -8,9 +8,11 @@ import { LSPClient } from './LSPClient.js'
  * hooks.
  * @returns A client that initializes and drives the configured protocol peer.
  *
- * @example
+ * @example Create a client and inspect a document
  * ```ts
  * import type { LSPTransportInterface } from '@orkestrel/lsp'
+ * import { createLSPClient } from '@orkestrel/lsp'
+ * import { join } from 'node:path'
  * import { pathToFileURL } from 'node:url'
  *
  * declare const transport: LSPTransportInterface
@@ -18,6 +20,21 @@ import { LSPClient } from './LSPClient.js'
  *
  * const client = createLSPClient({ transport, workspace: pathToFileURL(directory).href })
  * await client.start()
+ *
+ * const signal = AbortSignal.timeout(30_000)
+ * const uri = pathToFileURL(join(directory, 'main.ts')).href
+ *
+ * const diagnostics = await client.open(
+ * 	{
+ * 		uri,
+ * 		languageId: 'typescript',
+ * 		version: 1,
+ * 		text: 'const value = 1',
+ * 	},
+ * 	{ signal },
+ * )
+ * await client.close(uri)
+ * await client.destroy()
  * ```
  */
 export function createLSPClient(options: LSPClientOptions): LSPClientInterface {

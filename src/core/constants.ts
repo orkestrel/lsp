@@ -65,34 +65,34 @@ export const LSP_CAPABILITIES = Object.freeze({
 	}),
 } satisfies LSPClientCapabilities)
 
-/** Names the default request-settlement timeout in milliseconds. */
+/** Names the default request-settlement timeout, `30_000` milliseconds. */
 export const LSP_TIMEOUT = 30_000
 
-/** Identifies a malformed JSON payload. */
+/** Identifies a malformed JSON payload, `-32700`. */
 export const JSONRPC_PARSE_ERROR = -32700
 
-/** Identifies a structurally invalid JSON-RPC request. */
+/** Identifies a structurally invalid JSON-RPC request, `-32600`. */
 export const JSONRPC_INVALID_REQUEST = -32600
 
-/** Identifies a JSON-RPC method that the receiver does not provide. */
+/** Identifies a JSON-RPC method that the receiver does not provide, `-32601`. */
 export const JSONRPC_METHOD_NOT_FOUND = -32601
 
-/** Identifies invalid parameters supplied to a JSON-RPC method. */
+/** Identifies invalid parameters supplied to a JSON-RPC method, `-32602`. */
 export const JSONRPC_INVALID_PARAMS = -32602
 
-/** Identifies an internal JSON-RPC receiver failure. */
+/** Identifies an internal JSON-RPC receiver failure, `-32603`. */
 export const JSONRPC_INTERNAL_ERROR = -32603
 
-/** Identifies a Language Server Protocol request cancelled by the client. */
+/** Identifies a Language Server Protocol request cancelled by the client, `-32800`. */
 export const LSP_REQUEST_CANCELLED = -32800
 
-/** Identifies a request invalidated by modified document content. */
+/** Identifies a request invalidated by modified document content, `-32801`. */
 export const LSP_CONTENT_MODIFIED = -32801
 
-/** Identifies a Language Server Protocol request cancelled by the server. */
+/** Identifies a Language Server Protocol request cancelled by the server, `-32802`. */
 export const LSP_SERVER_CANCELLED = -32802
 
-/** Identifies a valid Language Server Protocol request that could not complete. */
+/** Identifies a valid Language Server Protocol request that could not complete, `-32803`. */
 export const LSP_REQUEST_FAILED = -32803
 
 /**

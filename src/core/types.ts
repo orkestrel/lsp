@@ -276,8 +276,30 @@ export type LSPTransportEventMap = {
  */
 export interface LSPTransportInterface {
 	readonly emitter: EmitterInterface<LSPTransportEventMap>
+	/**
+	 * Starts or restarts the byte transport.
+	 *
+	 * @returns A promise that resolves after a generation is open and its peer can be written to.
+	 * @remarks A call made while the previous generation is unsettled is the implementation's to
+	 * refuse, and an implementation that cannot reconnect rejects a call made after that generation
+	 * retires.
+	 */
 	start(): Promise<void>
+	/**
+	 * Sends bytes and reports whether the transport accepted them.
+	 *
+	 * @param bytes - The bytes written to the peer of the current generation.
+	 * @returns A promise that resolves true when the peer accepted the bytes, and false otherwise.
+	 * @remarks The call rejects rather than throwing, and resolves false after `close` resolves.
+	 */
 	send(bytes: Uint8Array): Promise<boolean>
+	/**
+	 * Closes the active transport generation.
+	 *
+	 * @returns A promise that resolves after the generation settles.
+	 * @remarks The call rejects rather than throwing. After it resolves, `send` resolves false and a
+	 * further `start` call may open a fresh generation.
+	 */
 	close(): Promise<void>
 }
 
@@ -340,7 +362,7 @@ export interface LSPClientOptions {
 	readonly signal?: AbortSignal
 }
 
-/** Configures a document inspection. */
+/** Configures a document inspection with the signal that bounds its diagnostics wait. */
 export interface LSPOpenOptions {
 	/**
 	 * Aborts the diagnostics wait without destroying the client.
