@@ -304,10 +304,12 @@ const workspace = isLSPDiagnosticOptions(capability) ? capability.workspaceDiagn
 ## Conformance
 
 This package tracks Language Server Protocol 3.18. The mirror at `tests/mirrors/metaModel.json`
-holds the protocol's metaModel instance as fetched bytes. Refresh the mirror by running
-`scripts/metamodel.sh`, which prints the fetched version and SHA-256. Update `META_MODEL_DIGEST`
-and `META_MODEL_VERSION` in `tests/setupConformance.ts` to the printed values in the same commit,
-so a mirror edited outside this procedure reddens the conformance run. The conformance proof covers
+holds the protocol's metaModel instance as fetched bytes. To refresh it, download the
+[protocol model](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/metaModel/metaModel.json)
+to that path without reformatting it. Compute the downloaded bytes' SHA-256 and read the model's
+`metaData.version`. Update `META_MODEL_DIGEST` and `META_MODEL_VERSION` in
+`tests/setupConformance.ts` to those values in the same commit, so an unpinned mirror change
+fails the conformance run. The conformance proof covers
 the subset of the protocol this package speaks, and the diagnostic surface is the string-message
 form matching the client's advertised capability.
 
