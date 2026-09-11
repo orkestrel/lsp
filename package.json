@@ -70,7 +70,7 @@
 		"test:policy": "vitest run --config vite.config.ts --no-cache --reporter=dot --project policy",
 		"test:setup": "vitest run --config vite.config.ts --no-cache --reporter=dot --project setup",
 		"test:config": "vitest run --config vite.config.ts --no-cache --reporter=dot --project config",
-		"test:guides": "vitest run --config vite.config.ts --no-cache --reporter=dot --project guides",
+		"test:guides": "node --experimental-strip-types tests/guides.test.ts",
 		"test:conformance": "vitest run --config vite.config.ts --no-cache --reporter=dot --project conformance",
 		"test:integration": "vitest run --config vite.config.ts --no-cache --reporter=dot --project integration",
 		"test:probe": "vitest run --config vite.config.ts --no-cache --reporter=verbose --project probe",
