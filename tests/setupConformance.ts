@@ -361,7 +361,7 @@ export function readStructure(
  * @returns The property's requiredness and base type, or `undefined` when the structure does not declare it directly.
  * @remarks The base type is `undefined` for every property whose declared type is not a base type.
  */
-export function readProperty(
+export function readModelMember(
 	model: ConformanceMetaModel,
 	structure: string,
 	member: string,
@@ -676,7 +676,7 @@ export function createStructureRow(
 		member,
 		optional,
 		base,
-		authority: readProperty(CONFORMANCE_MODEL, structure, member),
+		authority: readModelMember(CONFORMANCE_MODEL, structure, member),
 	}
 }
 

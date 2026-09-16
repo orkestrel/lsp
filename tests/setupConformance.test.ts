@@ -12,7 +12,7 @@ import {
 	readMetaModel,
 	readMethod,
 	readNodeSpecifier,
-	readProperty,
+	readModelMember,
 	readStructure,
 } from './setupConformance.js'
 import { createScratch, destroyScratch } from '@orkestrel/test/server'
@@ -41,8 +41,8 @@ describe('conformance infrastructure', () => {
 	})
 
 	it('reads a structure property hit and miss', () => {
-		expect(readProperty(CONFORMANCE_MODEL, 'Position', 'line')?.base).toBe('uinteger')
-		expect(readProperty(CONFORMANCE_MODEL, 'Position', 'column')).toBeUndefined()
+		expect(readModelMember(CONFORMANCE_MODEL, 'Position', 'line')?.base).toBe('uinteger')
+		expect(readModelMember(CONFORMANCE_MODEL, 'Position', 'column')).toBeUndefined()
 	})
 
 	it('reports a wrong method with the symbol and authority value', () => {
@@ -63,7 +63,7 @@ describe('conformance infrastructure', () => {
 	})
 
 	it('reports a missing structure member with the symbol and authority value', () => {
-		const property = readProperty(CONFORMANCE_MODEL, 'Position', 'column')
+		const property = readModelMember(CONFORMANCE_MODEL, 'Position', 'column')
 		expect(formatConformanceDrift('LSPPosition.column', 'Position.column', property)).toBe(
 			'LSPPosition.column drifted; Position.column=undefined',
 		)
