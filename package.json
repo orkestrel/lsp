@@ -1,6 +1,6 @@
 {
 	"name": "@orkestrel/lsp",
-	"version": "0.0.8",
+	"version": "0.0.9",
 	"description": "A typed Language Server Protocol client over an injected byte transport — base-protocol framing, JSON-RPC and protocol guards, and a stdio child-process transport. Part of the @orkestrel line.",
 	"keywords": [
 		"diagnostics",
