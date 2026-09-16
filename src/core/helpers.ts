@@ -2,7 +2,7 @@ import type { JSONRPCMessage, LSPDecodeState } from './types.js'
 import { JSONRPC_INVALID_REQUEST, JSONRPC_PARSE_ERROR, LSP_CONTENT_LIMIT } from './constants.js'
 import { LSPError } from './errors.js'
 import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse } from './validators.js'
-import { parseJSON } from '@orkestrel/contract'
+import { isNumber, parseJSON } from '@orkestrel/contract'
 
 /**
  * Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.
@@ -201,7 +201,7 @@ export function readLSPHeader(
 					})
 			}
 			const parsed = Number(field)
-			if (!Number.isSafeInteger(parsed))
+			if (!isNumber(parsed) || !Number.isSafeInteger(parsed))
 				throw new LSPError('The LSP Content-Length is invalid', {
 					code: 'framing',
 					context: { messages: Object.freeze([...messages]) },

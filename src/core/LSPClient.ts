@@ -39,6 +39,7 @@ import {
 	isLSPDocumentDiagnosticReport,
 	isLSPInitializeResult,
 	isLSPPublishDiagnosticsParams,
+	isLSPTextDocumentSyncOptions,
 } from './validators.js'
 
 /**
@@ -170,7 +171,7 @@ export class LSPClient implements LSPClientInterface {
 		if (
 			synchronization === undefined ||
 			synchronization === 0 ||
-			(typeof synchronization === 'object' && synchronization.openClose !== true)
+			(isLSPTextDocumentSyncOptions(synchronization) && synchronization.openClose !== true)
 		)
 			throw new LSPError('The LSP server does not support document open and close', {
 				code: 'protocol',
