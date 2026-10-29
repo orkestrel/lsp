@@ -1,4 +1,5 @@
 import { createLSPClient } from '@src/core'
+import { LSPObservation } from './setup.js'
 import { createStdioClientTransport } from '@src/server'
 import { requireValue } from '@orkestrel/test'
 import { destroyScratch, createScratch, isRunning } from '@orkestrel/test/server'
@@ -28,11 +29,14 @@ describe('core client over the server stdio transport', () => {
 		expect(transport.pid).toBeUndefined()
 		// The identifier is read while the generation is live, because retirement clears it and the
 		// reaping wait below needs the number the host gave this child.
-		let server: number | undefined = undefined
+		const server = new LSPObservation<number | undefined>(undefined)
 		try {
 			await client.start()
-			server = requireValue(transport.pid, 'the transport reported no language-server identifier')
-			expect(isRunning(server)).toBe(true)
+			server.value = requireValue(
+				transport.pid,
+				'the transport reported no language-server identifier',
+			)
+			expect(isRunning(server.value)).toBe(true)
 			expect(client.capabilities?.textDocumentSync).toStrictEqual({
 				openClose: true,
 				change: 1,
@@ -59,7 +63,7 @@ describe('core client over the server stdio transport', () => {
 			// Teardown and reaping run whatever the assertions did, so a failed expectation reports
 			// itself instead of leaving a language server behind for the next proof to meet.
 			await client.destroy()
-			if (server !== undefined) await waitForReaped(server)
+			if (server.value !== undefined) await waitForReaped(server.value)
 			await destroyScratch(scratch)
 		}
 		expect(transport.pid).toBeUndefined()

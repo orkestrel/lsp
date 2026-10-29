@@ -1,13 +1,4 @@
-import type {
-	JSONRPCMessage,
-	JSONRPCRequest,
-	LSPDecodeState,
-	LSPExit,
-	LSPServerCapabilities,
-	LSPTextDocumentSyncKind,
-	LSPTransportEventMap,
-	LSPTransportInterface,
-} from '@src/core'
+import type { JSONRPCMessage, JSONRPCRequest, LSPExit, LSPTextDocumentSyncKind } from '@src/core'
 import {
 	encodeLSPMessage,
 	isJSONRPCRequest,
@@ -16,164 +7,90 @@ import {
 	LSPClient,
 	LSPError,
 	LSP_METHODS,
-	parseLSPMessages,
 } from '@src/core'
-import { Emitter } from '@orkestrel/emitter'
+import { LSPFixtureTransport, LSPObservation } from '../../setup.js'
 import { createRecorder, waitForDelay } from '@orkestrel/test'
 import { describe, expect, it } from 'vitest'
 
-class LSPFixtureTransport implements LSPTransportInterface {
-	readonly #emitter = new Emitter<LSPTransportEventMap>()
-	readonly #messages: JSONRPCMessage[] = []
-	readonly #operations: string[] = []
-	readonly #capabilities: LSPServerCapabilities
-	readonly #shutdown: boolean
-	readonly #initialize: boolean
-	readonly #defer: boolean
-	readonly #send:
-		| { readonly method: string; readonly fault: 'throw' | 'false' | 'hang' }
-		| undefined
-	readonly #close: 'throw' | 'reject' | 'delay' | undefined
-	readonly #handler:
-		| ((peer: LSPFixtureTransport, message: JSONRPCMessage) => Promise<void> | void)
-		| undefined
-	#state: LSPDecodeState | undefined = undefined
-	readonly #releases: Array<() => void> = []
-	#starts = 0
-	#closes = 0
-
-	constructor(options?: {
-		readonly capabilities?: LSPServerCapabilities
-		readonly shutdown?: boolean
-		readonly initialize?: boolean
-		readonly defer?: boolean
-		readonly send?: { readonly method: string; readonly fault: 'throw' | 'false' | 'hang' }
-		readonly close?: 'throw' | 'reject' | 'delay'
-		readonly handler?: (peer: LSPFixtureTransport, message: JSONRPCMessage) => Promise<void> | void
-	}) {
-		this.#capabilities = options?.capabilities ?? { textDocumentSync: 1 }
-		this.#shutdown = options?.shutdown ?? true
-		this.#initialize = options?.initialize ?? true
-		this.#defer = options?.defer ?? false
-		this.#send = options?.send
-		this.#close = options?.close
-		this.#handler = options?.handler
-	}
-
-	get emitter(): Emitter<LSPTransportEventMap> {
-		return this.#emitter
-	}
-
-	get messages(): readonly JSONRPCMessage[] {
-		return [...this.#messages]
-	}
-
-	get operations(): readonly string[] {
-		return [...this.#operations]
-	}
-
-	get starts(): number {
-		return this.#starts
-	}
-
-	get closes(): number {
-		return this.#closes
-	}
-
-	async start(): Promise<void> {
-		this.#starts += 1
-		this.#operations.push('start')
-		if (this.#defer) await new Promise<void>((resolve) => this.#releases.push(resolve))
-	}
-
-	release(): void {
-		for (const release of this.#releases.splice(0)) release()
-	}
-
-	send(bytes: Uint8Array): Promise<boolean> {
-		const [messages, state] = parseLSPMessages(bytes, this.#state)
-		this.#state = state
-		for (const message of messages) {
-			if (
-				this.#send?.fault === 'throw' &&
-				this.#send.method === ('method' in message ? message.method : 'response')
-			)
-				throw new Error('Synchronous send failure')
-		}
-		return this.#deliver(messages)
-	}
-
-	close(): Promise<void> {
-		this.#closes += 1
-		this.#operations.push('close')
-		if (this.#close === 'throw') throw new Error('Synchronous close failure')
-		if (this.#close === 'reject') return Promise.reject(new Error('Close failure'))
-		if (this.#close === 'delay')
-			return waitForDelay(40).then(() => Promise.reject(new Error('Delayed close failure')))
-		return Promise.resolve()
-	}
-
-	receive(message: JSONRPCMessage): void {
-		this.#emitter.emit('chunk', encodeLSPMessage(message))
-	}
-
-	receiveBytes(bytes: Uint8Array): void {
-		this.#emitter.emit('chunk', bytes)
-	}
-
-	exit(exit: LSPExit): void {
-		this.#emitter.emit('exit', exit)
-	}
-
-	request(method: string): JSONRPCRequest | undefined {
-		for (const message of this.#messages) {
-			if (isJSONRPCRequest(message) && message.method === method) return message
-		}
-		return undefined
-	}
-
-	assertHandshake(): void {
-		const first = this.#messages[0]
-		const next = this.#messages[1]
-		if (
-			first === undefined ||
-			!('method' in first) ||
-			first.method !== LSP_METHODS.initialize ||
-			next === undefined ||
-			!('method' in next) ||
-			next.method !== LSP_METHODS.initialized ||
-			this.#messages.length !== 2
-		)
-			throw new Error('The fixture observed an invalid initialize ordering')
-	}
-
-	async #deliver(messages: readonly JSONRPCMessage[]): Promise<boolean> {
-		for (const message of messages) {
-			this.#messages.push(message)
-			this.#operations.push('method' in message ? message.method : 'response')
-			if (this.#send?.method === ('method' in message ? message.method : 'response')) {
-				if (this.#send.fault === 'hang') return new Promise<boolean>(() => {})
-				return false
-			}
-			if (
-				this.#initialize &&
-				isJSONRPCRequest(message) &&
-				message.method === LSP_METHODS.initialize
-			)
-				this.receive({
-					jsonrpc: '2.0',
-					id: message.id,
-					result: { capabilities: this.#capabilities },
-				})
-			if (isJSONRPCRequest(message) && message.method === LSP_METHODS.shutdown && this.#shutdown)
-				this.receive({ jsonrpc: '2.0', id: message.id, result: null })
-			await this.#handler?.(this, message)
-		}
-		return true
-	}
-}
-
 describe('LSPClient', () => {
+	it('starts with no documents or result ids after a failed handshake', async () => {
+		const uri = 'file:///workspace/retry.ts'
+		const params: unknown[] = []
+		const transport = new LSPFixtureTransport({
+			initialize: false,
+			handler: (peer, message) => {
+				if (!isJSONRPCRequest(message)) return
+				if (message.method === LSP_METHODS.initialize) {
+					peer.receive({
+						jsonrpc: '2.0',
+						id: message.id,
+						result: {
+							capabilities: {
+								positionEncoding: peer.starts === 2 ? 'utf-8' : 'utf-16',
+								textDocumentSync: 1,
+								diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+							},
+						},
+					})
+				}
+				if (message.method === LSP_METHODS.diagnostic) {
+					params.push(message.params)
+					peer.receive({
+						jsonrpc: '2.0',
+						id: message.id,
+						result: { kind: 'full', resultId: 'old-result', items: [] },
+					})
+				}
+			},
+		})
+		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
+		try {
+			await client.start()
+			await client.open(
+				{ uri, languageId: 'typescript', version: 1, text: '' },
+				{ signal: new AbortController().signal },
+			)
+			transport.exit({ code: 1, signal: null })
+			await expect(client.start()).rejects.toMatchObject({ code: 'protocol' })
+			expect(client.capabilities).toBeUndefined()
+			expect(client.encoding).toBeUndefined()
+			await client.start()
+			await expect(client.close(uri)).rejects.toMatchObject({ code: 'protocol' })
+			await expect(
+				client.open(
+					{ uri, languageId: 'typescript', version: 2, text: '' },
+					{ signal: new AbortController().signal },
+				),
+			).resolves.toEqual([])
+			expect(params).toEqual([{ textDocument: { uri } }, { textDocument: { uri } }])
+			expect(transport.starts).toBe(3)
+		} finally {
+			await client.destroy()
+		}
+	})
+
+	it('drops transport chunks while no session is bound', async () => {
+		const notifications = createRecorder<[JSONRPCMessage]>()
+		const errors = createRecorder<[unknown]>()
+		const transport = new LSPFixtureTransport()
+		const client = new LSPClient({
+			transport,
+			workspace: 'file:///workspace',
+			on: { notification: notifications.handler, error: errors.handler },
+		})
+		const notification: JSONRPCMessage = { jsonrpc: '2.0', method: 'window/logMessage' }
+		transport.receive(notification)
+		transport.receiveBytes(new TextEncoder().encode('invalid\r\n\r\n'))
+		expect(notifications.count).toBe(0)
+		expect(errors.count).toBe(0)
+		await client.start()
+		transport.receive(notification)
+		expect(notifications.count).toBe(1)
+		transport.exit({ code: 0, signal: null })
+		transport.receive(notification)
+		expect(notifications.count).toBe(1)
+		await client.destroy()
+	})
 	it('performs initialize then initialized with nothing between', async () => {
 		const transport = new LSPFixtureTransport()
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
@@ -461,10 +378,8 @@ describe('LSPClient', () => {
 		})
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		let caught: unknown
-
-		try {
-			await client.open(
+		const caught = await client
+			.open(
 				{
 					uri: 'file:///workspace/already-aborted.ts',
 					languageId: 'typescript',
@@ -473,9 +388,10 @@ describe('LSPClient', () => {
 				},
 				{ signal: controller.signal },
 			)
-		} catch (error) {
-			caught = error
-		}
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			)
 
 		expect(transport.operations).not.toContain(LSP_METHODS.open)
 		expect(caught).toMatchObject({ code: 'aborted' })
@@ -775,7 +691,7 @@ describe('LSPClient', () => {
 
 	it('clears a prior result id when a full report omits one', async () => {
 		const uri = 'file:///workspace/cache.ts'
-		let request = 0
+		const request = new LSPObservation<number>(0)
 		const transport = new LSPFixtureTransport({
 			capabilities: {
 				textDocumentSync: 1,
@@ -783,14 +699,14 @@ describe('LSPClient', () => {
 			},
 			handler: (peer, message) => {
 				if (!isJSONRPCRequest(message) || message.method !== LSP_METHODS.diagnostic) return
-				request += 1
-				if (request === 1)
+				request.value += 1
+				if (request.value === 1)
 					peer.receive({
 						jsonrpc: '2.0',
 						id: message.id,
 						result: { kind: 'full', resultId: 'result-a', items: [] },
 					})
-				else if (request === 2)
+				else if (request.value === 2)
 					peer.receive({ jsonrpc: '2.0', id: message.id, result: { kind: 'full', items: [] } })
 				else
 					peer.receive({
@@ -858,18 +774,18 @@ describe('LSPClient', () => {
 	})
 
 	it('restarts the transport after a failed handshake', async () => {
-		let initialize = 0
+		const initialize = new LSPObservation<number>(0)
 		const transport = new LSPFixtureTransport({
 			initialize: false,
 			handler: (peer, message) => {
 				if (!isJSONRPCRequest(message) || message.method !== LSP_METHODS.initialize) return
-				initialize += 1
+				initialize.value += 1
 				peer.receive({
 					jsonrpc: '2.0',
 					id: message.id,
 					result: {
 						capabilities: {
-							positionEncoding: initialize === 1 ? 'utf-8' : 'utf-16',
+							positionEncoding: initialize.value === 1 ? 'utf-8' : 'utf-16',
 							textDocumentSync: 1,
 						},
 					},
@@ -1440,8 +1356,7 @@ describe('LSPClient', () => {
 		const destroyed: boolean[] = []
 		const codes: Array<string | undefined> = []
 		const transport = new LSPFixtureTransport({ close: 'reject' })
-		let client: LSPClient | undefined = undefined
-		client = new LSPClient({
+		const client = new LSPClient({
 			transport,
 			workspace: 'file:///workspace',
 			on: {
@@ -1464,8 +1379,7 @@ describe('LSPClient', () => {
 		const destroyed: boolean[] = []
 		const codes: Array<string | undefined> = []
 		const transport = new LSPFixtureTransport({ close: 'delay' })
-		let client: LSPClient | undefined = undefined
-		client = new LSPClient({
+		const client = new LSPClient({
 			transport,
 			workspace: 'file:///workspace',
 			timeout: 10,
@@ -1542,14 +1456,14 @@ describe('LSPClient', () => {
 
 	it('completes a restart issued from the exit handler as a second generation', async () => {
 		const transport = new LSPFixtureTransport({ initialize: false })
-		let restart: Promise<void> | undefined
+		const restart = new LSPObservation<Promise<void> | undefined>(undefined)
 		const client = new LSPClient({
 			transport,
 			workspace: 'file:///workspace',
 			on: {
 				exit: () => {
-					restart = client.start()
-					restart.catch(() => {})
+					restart.value = client.start()
+					restart.value.catch(() => {})
 				},
 			},
 		})
@@ -1571,7 +1485,7 @@ describe('LSPClient', () => {
 			result: { capabilities: { textDocumentSync: 1 } },
 		})
 
-		await expect(restart).resolves.toBeUndefined()
+		await expect(restart.value).resolves.toBeUndefined()
 		expect(transport.starts).toBe(2)
 		expect(transport.messages.at(-1)).toMatchObject({ method: LSP_METHODS.initialized })
 		await client.destroy()
@@ -1579,14 +1493,14 @@ describe('LSPClient', () => {
 
 	it('does not initialize a superseded transport generation', async () => {
 		const transport = new LSPFixtureTransport({ defer: true })
-		let restart: Promise<void> | undefined
+		const restart = new LSPObservation<Promise<void> | undefined>(undefined)
 		const client = new LSPClient({
 			transport,
 			workspace: 'file:///workspace',
 			on: {
 				exit: () => {
-					restart = client.start()
-					restart.catch(() => {})
+					restart.value = client.start()
+					restart.value.catch(() => {})
 				},
 			},
 		})
@@ -1600,7 +1514,7 @@ describe('LSPClient', () => {
 		transport.release()
 
 		await expect(first).rejects.toMatchObject({ code: 'closed' })
-		await expect(restart).resolves.toBeUndefined()
+		await expect(restart.value).resolves.toBeUndefined()
 		expect(
 			transport.messages.filter(
 				(message) => isJSONRPCRequest(message) && message.method === LSP_METHODS.initialize,
@@ -1685,13 +1599,13 @@ describe('LSPClient', () => {
 			},
 			{ signal: new AbortController().signal },
 		)
-		let settled = false
+		const settled = new LSPObservation<boolean>(false)
 		void opening.then(
 			() => {
-				settled = true
+				settled.value = true
 			},
 			() => {
-				settled = true
+				settled.value = true
 			},
 		)
 		process.on('unhandledRejection', recorder.handler)
@@ -1700,7 +1614,7 @@ describe('LSPClient', () => {
 			// The precondition the drain needs: the open notification reached the transport, which
 			// parked it, and the caller's promise is still in flight when the teardown begins.
 			expect(transport.operations).toContain(LSP_METHODS.open)
-			expect(settled).toBe(false)
+			expect(settled.value).toBe(false)
 			const destroying = client.destroy()
 			await expect(opening).rejects.toMatchObject({
 				code: 'closed',
@@ -1724,10 +1638,8 @@ describe('LSPClient', () => {
 		const transport = new LSPFixtureTransport({ capabilities: {} })
 		const client = new LSPClient({ transport, workspace: 'file:///workspace' })
 		await client.start()
-		let caught: unknown
-
-		try {
-			await client.open(
+		const caught = await client
+			.open(
 				{
 					uri: 'file:///workspace/error.ts',
 					languageId: 'typescript',
@@ -1736,9 +1648,10 @@ describe('LSPClient', () => {
 				},
 				{ signal: new AbortController().signal },
 			)
-		} catch (error) {
-			caught = error
-		}
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			)
 		expect(isLSPError(caught)).toBe(true)
 		expect(caught).toBeInstanceOf(LSPError)
 		await client.destroy()

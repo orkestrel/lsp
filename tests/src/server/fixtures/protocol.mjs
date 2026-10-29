@@ -6,8 +6,37 @@
 // Keeping one copy here is what stops a framing correction from reaching one peer and leaving the
 // other measuring the old behaviour.
 
-// The accumulator `listen` fills. One fixture process registers one reader, so one buffer holds it.
-let pending = Buffer.alloc(0)
+// This fixture is loaded directly by child processes and owns its independent framing state.
+class PeerFrames {
+	#bytes
+
+	constructor(bytes) {
+		this.#bytes = bytes
+	}
+
+	read(chunk, handle) {
+		this.#bytes = drain(Buffer.concat([this.#bytes, chunk]), handle)
+	}
+
+	drain(handle) {
+		for (;;) {
+			const rest = this.#bytes
+			const boundary = rest.indexOf('\r\n\r\n')
+			if (boundary < 0) return rest
+			const header = rest.subarray(0, boundary).toString('utf8')
+			const declared = /content-length:\s*(\d+)/i.exec(header)
+			if (declared === null) {
+				this.#bytes = rest.subarray(boundary + 4)
+				continue
+			}
+			const length = Number(declared[1])
+			if (rest.length < boundary + 4 + length) return rest
+			const body = rest.subarray(boundary + 4, boundary + 4 + length).toString('utf8')
+			this.#bytes = rest.subarray(boundary + 4 + length)
+			handle(JSON.parse(body))
+		}
+	}
+}
 
 /**
  * Encodes a JSON-RPC message with its Content-Length header as one base-protocol buffer.
@@ -38,22 +67,7 @@ export function reply(message) {
  * @returns {Buffer} The bytes left after the last complete frame.
  */
 export function drain(bytes, handle) {
-	let rest = bytes
-	for (;;) {
-		const boundary = rest.indexOf('\r\n\r\n')
-		if (boundary < 0) return rest
-		const header = rest.subarray(0, boundary).toString('utf8')
-		const declared = /content-length:\s*(\d+)/i.exec(header)
-		if (declared === null) {
-			rest = rest.subarray(boundary + 4)
-			continue
-		}
-		const length = Number(declared[1])
-		if (rest.length < boundary + 4 + length) return rest
-		const body = rest.subarray(boundary + 4, boundary + 4 + length).toString('utf8')
-		rest = rest.subarray(boundary + 4 + length)
-		handle(JSON.parse(body))
-	}
+	return new PeerFrames(bytes).drain(handle)
 }
 
 /**
@@ -63,7 +77,6 @@ export function drain(bytes, handle) {
  * @returns {void}
  */
 export function listen(handle) {
-	process.stdin.on('data', (chunk) => {
-		pending = drain(Buffer.concat([pending, chunk]), handle)
-	})
+	const reader = new PeerFrames(Buffer.alloc(0))
+	process.stdin.on('data', (chunk) => reader.read(chunk, handle))
 }

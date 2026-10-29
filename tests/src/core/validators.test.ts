@@ -21,19 +21,7 @@ import {
 } from '@src/core'
 import { describe, expect, it } from 'vitest'
 
-// Carries range members on an instance whose prototype chain is not a plain record's.
-class WireRange {
-	readonly start = { line: 0, character: 0 }
-	readonly end = { line: 0, character: 4 }
-}
-
-// Carries the name and the declared code of a package error on a real subclass of `Error`, and
-// carries no brand. It clears every guard check that precedes the brand check, so only the brand
-// check can refuse it.
-class LookalikeError extends Error {
-	override readonly name = 'LSPError'
-	readonly code = 'framing'
-}
+import { LookalikeError, WireRange } from '../../setup.js'
 
 describe('JSON-RPC guards', () => {
 	it('accepts each envelope arm and refuses overlapping arms', () => {

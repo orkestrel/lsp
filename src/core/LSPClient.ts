@@ -10,7 +10,6 @@ import type {
 	LSPClientLifecycle,
 	LSPClientOptions,
 	LSPOpenOptions,
-	LSPDecodeState,
 	LSPDiagnostic,
 	LSPDocumentDiagnosticParams,
 	LSPDocumentURI,
@@ -31,7 +30,7 @@ import {
 } from './constants.js'
 import { LSPError, isLSPError } from './errors.js'
 import { encodeLSPMessage, waitForDeadline } from './helpers.js'
-import { parseLSPMessages } from './parsers.js'
+import { LSPSession } from './LSPSession.js'
 import {
 	isJSONRPCNotification,
 	isJSONRPCRequest,
@@ -39,7 +38,6 @@ import {
 	isLSPDocumentDiagnosticReport,
 	isLSPInitializeResult,
 	isLSPPublishDiagnosticsParams,
-	isLSPTextDocumentSyncOptions,
 } from './validators.js'
 
 /**
@@ -88,13 +86,7 @@ export class LSPClient implements LSPClientInterface {
 	readonly #error: (error: unknown) => void
 	readonly #pending = new Map<JSONRPCId, LSPPending<unknown> & { readonly method: string }>()
 	readonly #publications = new Map<LSPDocumentURI, LSPPending<readonly LSPDiagnostic[]>>()
-	readonly #documents = new Set<LSPDocumentURI>()
-	readonly #diagnostics = new Map<
-		LSPDocumentURI,
-		{ readonly resultId: string; readonly diagnostics: readonly LSPDiagnostic[] }
-	>()
-	#state: LSPDecodeState | undefined = undefined
-	#capabilities: LSPServerCapabilities | undefined = undefined
+	#session: LSPSession | undefined
 	#nextId = 0
 	#generation = 0
 	#lifecycle: LSPClientLifecycle = { phase: 'idle' }
@@ -126,16 +118,14 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	get capabilities(): LSPServerCapabilities | undefined {
-		return this.#capabilities
+		return this.#session?.capabilities
 	}
 
 	get encoding(): LSPPositionEncoding | undefined {
 		// `utf-16` here is the protocol's own default for a server that omitted `positionEncoding`,
 		// not this client's advertisement.
-		return (
-			this.#capabilities?.positionEncoding ??
-			(this.#capabilities === undefined ? undefined : 'utf-16')
-		)
+		const capabilities = this.#session?.capabilities
+		return capabilities?.positionEncoding ?? (capabilities === undefined ? undefined : 'utf-16')
 	}
 
 	start(): Promise<void> {
@@ -146,6 +136,7 @@ export class LSPClient implements LSPClientInterface {
 		this.#generation += 1
 		const generation = this.#generation
 		const starting = Promise.resolve().then(() => this.#begin(generation))
+		this.#session = new LSPSession()
 		this.#lifecycle = { phase: 'starting', promise: starting, generation }
 		return starting
 	}
@@ -160,26 +151,11 @@ export class LSPClient implements LSPClientInterface {
 				code: 'aborted',
 				cause: signal.reason,
 			})
-		if (this.#lifecycle.phase !== 'ready')
+		const session = this.#session
+		if (this.#lifecycle.phase !== 'ready' || session === undefined)
 			throw new LSPError('The LSP client is closed', { code: 'closed' })
-		if (this.#documents.has(document.uri))
-			throw new LSPError('The document URI is already open', {
-				code: 'duplicate',
-				context: { value: document.uri },
-			})
-		const synchronization = this.#capabilities?.textDocumentSync
-		if (
-			synchronization === undefined ||
-			synchronization === 0 ||
-			(isLSPTextDocumentSyncOptions(synchronization) && synchronization.openClose !== true)
-		)
-			throw new LSPError('The LSP server does not support document open and close', {
-				code: 'protocol',
-				context: { value: synchronization },
-			})
-
-		this.#documents.add(document.uri)
-		if (this.#capabilities?.diagnosticProvider !== undefined)
+		session.open(document.uri)
+		if (session.capabilities?.diagnosticProvider !== undefined)
 			return this.#openPull(document, signal)
 		return this.#openPush(document, signal)
 	}
@@ -187,7 +163,7 @@ export class LSPClient implements LSPClientInterface {
 	async close(uri: LSPDocumentURI): Promise<void> {
 		if (this.#lifecycle.phase !== 'ready')
 			throw new LSPError('The LSP client is closed', { code: 'closed' })
-		if (!this.#documents.has(uri))
+		if (!this.#session?.documents.has(uri))
 			throw new LSPError('The document URI is not open', {
 				code: 'protocol',
 				context: { value: uri },
@@ -197,7 +173,7 @@ export class LSPClient implements LSPClientInterface {
 			method: LSP_METHODS.close,
 			params: { textDocument: { uri } },
 		})
-		this.#documents.delete(uri)
+		this.#session?.release(uri)
 		this.#settlePublication(
 			uri,
 			new LSPError('The document was closed before diagnostics arrived', {
@@ -253,13 +229,15 @@ export class LSPClient implements LSPClientInterface {
 			await this.#write({ jsonrpc: '2.0', method: LSP_METHODS.initialized, params: {} })
 			if (!this.#ownsGeneration(generation))
 				throw new LSPError('The LSP transport is closed', { code: 'closed' })
-			this.#capabilities = Object.freeze({ ...result.capabilities })
+			const session = this.#session
+			if (session === undefined)
+				throw new LSPError('The LSP transport is closed', { code: 'closed' })
+			session.capabilities = result.capabilities
 			this.#lifecycle = { phase: 'ready', generation }
 		} catch (error) {
 			if (this.#ownsGeneration(generation)) {
 				await this.#closeTransport()
 				if (this.#ownsGeneration(generation)) {
-					this.#clearSession()
 					this.#lifecycle = { phase: 'closed' }
 				}
 			}
@@ -278,7 +256,7 @@ export class LSPClient implements LSPClientInterface {
 				params: { textDocument: document },
 			})
 		} catch (error) {
-			this.#documents.delete(document.uri)
+			this.#session?.release(document.uri)
 			throw error
 		}
 		if (signal.aborted)
@@ -291,14 +269,15 @@ export class LSPClient implements LSPClientInterface {
 				code: 'aborted',
 				cause: this.#signal.reason,
 			})
-		if (this.#capabilities === undefined)
+		const session = this.#session
+		if (session?.capabilities === undefined)
 			throw new LSPError('The LSP transport is closed', { code: 'closed' })
-		const previous = this.#diagnostics.get(document.uri)
+		const previous = session.diagnostics.get(document.uri)
 		const params = {
 			textDocument: { uri: document.uri },
-			...(this.#capabilities?.diagnosticProvider?.identifier === undefined
+			...(session.capabilities?.diagnosticProvider?.identifier === undefined
 				? {}
-				: { identifier: this.#capabilities.diagnosticProvider.identifier }),
+				: { identifier: session.capabilities.diagnosticProvider.identifier }),
 			...(previous === undefined ? {} : { previousResultId: previous.resultId }),
 		} satisfies LSPDocumentDiagnosticParams
 		const result = await this.#request(LSP_METHODS.diagnostic, params, signal)
@@ -313,16 +292,11 @@ export class LSPClient implements LSPClientInterface {
 					code: 'protocol',
 					context: { value: result },
 				})
-			this.#diagnostics.set(document.uri, {
-				resultId: result.resultId,
-				diagnostics: previous.diagnostics,
-			})
+			session.record(document.uri, result.resultId, previous.diagnostics)
 			return previous.diagnostics
 		}
 		const diagnostics = Object.freeze([...result.items])
-		if (result.resultId !== undefined)
-			this.#diagnostics.set(document.uri, { resultId: result.resultId, diagnostics })
-		else this.#diagnostics.delete(document.uri)
+		session.record(document.uri, result.resultId, diagnostics)
 		return diagnostics
 	}
 
@@ -341,7 +315,7 @@ export class LSPClient implements LSPClientInterface {
 			params: { textDocument: document },
 		}).catch((error: unknown) => {
 			this.#settlePublication(document.uri, error, true)
-			this.#documents.delete(document.uri)
+			this.#session?.release(document.uri)
 		})
 		return publication.promise
 	}
@@ -420,12 +394,12 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	#receiveChunk(chunk: Uint8Array): void {
+		const session = this.#session
+		if (session === undefined) return
 		try {
-			const [messages, state] = parseLSPMessages(chunk, this.#state)
-			this.#state = state
+			const messages = session.decode(chunk)
 			for (const message of messages) this.#receive(message)
 		} catch (error) {
-			this.#state = undefined
 			const messages = isLSPError(error) ? error.context?.messages : undefined
 			if (messages !== undefined) {
 				for (const message of messages) this.#receive(message)
@@ -617,7 +591,7 @@ export class LSPClient implements LSPClientInterface {
 		if (lifecycle.phase === 'destroying')
 			this.#lifecycle = { phase: 'destroying', promise: lifecycle.promise }
 		else if (lifecycle.phase !== 'destroyed') this.#lifecycle = { phase: 'closed' }
-		this.#clearSession()
+		this.#session = undefined
 		this.#drain(
 			new LSPError('The LSP transport exited', { code: 'closed', context: { value: exit } }),
 		)
@@ -637,7 +611,7 @@ export class LSPClient implements LSPClientInterface {
 	async #teardown(): Promise<void> {
 		try {
 			this.#drain(new LSPError('The LSP client is closing', { code: 'closed' }))
-			if (this.#capabilities !== undefined) {
+			if (this.#session?.capabilities !== undefined) {
 				try {
 					await this.#request(LSP_METHODS.shutdown)
 				} catch {}
@@ -650,7 +624,7 @@ export class LSPClient implements LSPClientInterface {
 			this.#transport.emitter.off('exit', this.#exit)
 			this.#transport.emitter.off('error', this.#error)
 			if (this.#abort !== undefined) this.#signal?.removeEventListener('abort', this.#abort)
-			this.#clearSession()
+			this.#session = undefined
 			this.#lifecycle = { phase: 'destroyed' }
 			this.#emitter.destroy()
 		}
@@ -685,12 +659,5 @@ export class LSPClient implements LSPClientInterface {
 			(this.#lifecycle.phase === 'starting' || this.#lifecycle.phase === 'ready') &&
 			this.#lifecycle.generation === generation
 		)
-	}
-
-	#clearSession(): void {
-		this.#state = undefined
-		this.#capabilities = undefined
-		this.#documents.clear()
-		this.#diagnostics.clear()
 	}
 }

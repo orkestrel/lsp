@@ -3,14 +3,13 @@ import { encodeLSPMessage } from '@src/core'
 import { createStdioClientTransport } from '@src/server'
 import { createRecorder, waitForCondition } from '@orkestrel/test'
 import {
+	PEER,
 	collectPeerMessages,
 	createPeerOptions,
 	readPeerPid,
 	waitForReaped,
 } from '../../setupServer.js'
 import { describe, expect, it } from 'vitest'
-
-const PEER = { budget: 5_000 }
 
 describe('createStdioClientTransport', () => {
 	it('produces a transport that spawns, carries bytes, and ends its child', async () => {

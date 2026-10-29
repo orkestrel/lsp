@@ -189,8 +189,9 @@ later continuation. The parser accepts unknown header fields and refuses malform
 known `Content-Type` field. Use `encodeLSPMessage()` to produce a byte-accurate frame.
 
 The core package publishes the operations over a retained state beside the codec.
-`joinLSPSegments()` flattens a segment chain into one owned buffer, and `takeLSPTail()` takes that
-chain's last bytes as an owned buffer, which is how a scan window survives a chunk split.
+`LSPChain` walks retained segments newest first. Its `join()` method flattens the chain into one
+owned buffer, and `tail()` takes its last bytes into an owned scan window. Each instance owns one
+traversal; construct a fresh instance for each operation.
 `scanLSPBoundary()` reports the first `\r\n\r\n` index in a flat buffer, and that index addresses
 the buffer you passed, so a caller scanning a window adds the window's own offset to it.
 `scanLSPBoundary()` returns the boundary's index, so `bytes.subarray(0, boundary)` is the block
@@ -200,14 +201,26 @@ Flatten a retained state, scan that buffer for the header boundary, and take the
 
 ```ts
 import type { LSPDecodeState } from '@orkestrel/lsp'
-import { joinLSPSegments, scanLSPBoundary, takeLSPTail } from '@orkestrel/lsp'
+import { LSPChain, scanLSPBoundary } from '@orkestrel/lsp'
 
 declare const state: LSPDecodeState
 
-const bytes = joinLSPSegments(state)
+const bytes = new LSPChain(state).join()
 const boundary = scanLSPBoundary(bytes)
-const overlap = takeLSPTail(state, 3)
+const overlap = new LSPChain(state).tail(3)
 ```
+
+Build a retained segment without decoding it when assembling a continuation:
+
+```ts
+import { buildLSPSegment } from '@orkestrel/lsp'
+
+const state = buildLSPSegment(undefined, new TextEncoder().encode('Content-'))
+const continued = buildLSPSegment(state, new TextEncoder().encode('Length: 40'))
+```
+
+An empty chunk preserves the preceding state by identity. Non-empty chunks are copied and retain
+any resolved header boundary and content length.
 
 When you frame the bytes yourself, reach the header and body grammars directly. `readLSPHeader()`
 reads one header block and returns the `Content-Length` it declares. `readLSPBody()` reads the
@@ -336,6 +349,27 @@ The transport interface exposes these behavioral methods:
 | `send`  | `send(bytes: Uint8Array): Promise<boolean>` | Sends bytes and reports whether the transport accepted them. |
 | `close` | `close(): Promise<void>`                    | Closes the active transport generation.                      |
 
+#### `LSPChain`
+
+The chain exposes its iterator step and owned byte projections:
+
+| Method | Signature                                           | Summary                                                                         |
+| ------ | --------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `next` | `next(): IteratorResult<LSPDecodeState, undefined>` | Yields the next segment, newest first, or reports exhaustion.                   |
+| `join` | `join(): Uint8Array`                                | Flattens the remaining segments into an owned buffer at their original offsets. |
+| `tail` | `tail(count: number): Uint8Array`                   | Takes at most the requested final bytes, refusing a negative allocation length. |
+
+Consume one traversal through its iterator protocol:
+
+```ts
+import type { LSPDecodeState } from '@orkestrel/lsp'
+import { LSPChain } from '@orkestrel/lsp'
+
+declare const state: LSPDecodeState
+const chain = new LSPChain(state)
+const first = chain.next()
+```
+
 ## Surface
 
 ### Stdio client transport
@@ -375,6 +409,11 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 The framing, timing, and error surface provides these exports.
 
+`isLSPError` recognizes an own identity brand across package copies and accepts subclasses whose
+`name` differs. It refuses transparent proxies, unbranded lookalikes, and plain branded objects.
+It checks the declared code and context members; context objects and callable contexts are accepted
+when their members conform, and message arrays are checked by index without running their iterator.
+
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
 | Export             | Kind      | Shape                                                                                                                               | Summary                                                                                     |
@@ -382,8 +421,8 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 | `encodeLSPMessage` | function  | `(message: JSONRPCMessage) => Uint8Array`                                                                                           | Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.                    |
 | `parseLSPMessages` | function  | `(chunk: Uint8Array, state?: LSPDecodeState) => readonly [messages: readonly JSONRPCMessage[], state: LSPDecodeState \| undefined]` | Parses a byte chunk into complete LSP base-protocol messages and retained decode state.     |
 | `LSPDecodeState`   | type      | `{ bytes, previous?, size } \| { bytes, previous?, size, boundary, length }`                                                        | Retains incremental base-protocol bytes and resolved framing metadata between decode calls. |
-| `joinLSPSegments`  | function  | `(state: LSPDecodeState) => Uint8Array`                                                                                             | Flattens the retained segments of a decode state into one owned buffer.                     |
-| `takeLSPTail`      | function  | `(state: LSPDecodeState, count: number) => Uint8Array`                                                                              | Takes the last retained bytes of a decode state as an owned buffer.                         |
+| `buildLSPSegment`  | function  | `(state: LSPDecodeState \| undefined, chunk: Uint8Array) => LSPDecodeState \| undefined`                                            | Appends an owned byte segment while retaining the preceding framing metadata.               |
+| `LSPChain`         | class     | `IterableIterator<LSPDecodeState>`                                                                                                  | Walks retained decode segments newest first and copies their bytes in arrival order.        |
 | `scanLSPBoundary`  | function  | `(bytes: Uint8Array) => number \| undefined`                                                                                        | Finds the first base-protocol header boundary in a flat buffer.                             |
 | `readLSPHeader`    | function  | `(header: Uint8Array, messages?: readonly JSONRPCMessage[]) => number`                                                              | Reads one base-protocol header block and returns the content length it declares.            |
 | `readLSPBody`      | function  | `(body: Uint8Array, messages?: readonly JSONRPCMessage[]) => JSONRPCMessage`                                                        | Reads one base-protocol content body as a validated JSON-RPC message.                       |
@@ -506,7 +545,9 @@ A `Shape` cell holds the constant's declared type.
 - [`tests/guides.test.ts`](../tests/guides.test.ts) — the `## Surface` ↔ `src/core` and `src/server` bijection, the `LSPClientInterface` ↔ `LSPClient` and `LSPTransportInterface` method bijections, and the equality gate: every `Summary` cell against its declaration's description paragraph, the titled `Create a client and inspect a document` fence against the `@example` block of that title (pinned so the titled pair cannot be retired silently), and the README pitch against this guide's tagline. It also runs the flagship fences and asserts the values their comments claim.
 - [`tests/src/core/LSPClient.test.ts`](../tests/src/core/LSPClient.test.ts) — the handshake, the ready and dead generations, document ownership, the pull and push diagnostics paths, the abort and timeout bounds, and bounded teardown.
 - [`tests/src/core/factories.test.ts`](../tests/src/core/factories.test.ts) — `createLSPClient` returns a working `LSPClientInterface` over the options it is handed.
-- [`tests/src/core/helpers.test.ts`](../tests/src/core/helpers.test.ts) — `encodeLSPMessage`, the retained-state operations `joinLSPSegments` and `takeLSPTail`, the `scanLSPBoundary` index, the `readLSPHeader` and `readLSPBody` grammars with their coded refusals, and `waitForDeadline`.
+- [`tests/src/core/LSPFraming.test.ts`](../tests/src/core/LSPFraming.test.ts) — frame transitions, retained incomplete state, refusal contexts, and coalesced-frame depth.
+- [`tests/src/core/LSPChain.test.ts`](../tests/src/core/LSPChain.test.ts) — segment order, owned joins and tails, iterator exhaustion, and a deep single-byte chain.
+- [`tests/src/core/helpers.test.ts`](../tests/src/core/helpers.test.ts) — `encodeLSPMessage`, the `scanLSPBoundary` index, the `readLSPHeader` and `readLSPBody` grammars with their coded refusals, and `waitForDeadline`.
 - [`tests/src/core/parsers.test.ts`](../tests/src/core/parsers.test.ts) — `parseLSPMessages` over split, coalesced, and malformed frames, and the state it retains between calls.
 - [`tests/src/core/validators.test.ts`](../tests/src/core/validators.test.ts) — every guard accepts its own shape, refuses a near miss, and stays total for a hostile value.
 - [`tests/src/server/factories.test.ts`](../tests/src/server/factories.test.ts) — `createStdioClientTransport` returns a working `StdioClientTransportInterface` over the options it is handed.

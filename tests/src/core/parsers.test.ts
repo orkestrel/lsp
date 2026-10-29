@@ -8,6 +8,7 @@ import {
 	LSP_HEADER_LIMIT,
 	parseLSPMessages,
 } from '@src/core'
+import { attempt } from '@orkestrel/contract'
 import { describe, expect, it } from 'vitest'
 
 describe('parseLSPMessages', () => {
@@ -52,7 +53,7 @@ describe('parseLSPMessages', () => {
 		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
 		const frame = encodeLSPMessage(message)
 		const boundary = new TextDecoder().decode(frame).indexOf('\r\n\r\n')
-		for (let offset = 0; offset < 4; offset += 1) {
+		for (const offset of Array.from({ length: 4 }).keys()) {
 			const split = boundary + offset
 			const [, state] = parseLSPMessages(frame.slice(0, split))
 			const [messages, pending] = parseLSPMessages(frame.slice(split), state)
@@ -70,11 +71,10 @@ describe('parseLSPMessages', () => {
 		const frames = messages.map((message) => encodeLSPMessage(message))
 		const length = frames.reduce((total, frame) => total + frame.byteLength, 0)
 		const chunk = new Uint8Array(length)
-		let offset = 0
-		for (const frame of frames) {
+		frames.reduce((offset, frame) => {
 			chunk.set(frame, offset)
-			offset += frame.byteLength
-		}
+			return offset + frame.byteLength
+		}, 0)
 
 		const [parsed, pending] = parseLSPMessages(chunk)
 		expect(parsed).toEqual(messages)
@@ -151,20 +151,20 @@ describe('parseLSPMessages', () => {
 		const body = encoder.encode(JSON.stringify(message))
 		const header = encoder.encode(`Content-Length: ${body.byteLength}\r\n\r\n`)
 		const frame = encodeLSPMessage(message)
-		let state = parseLSPMessages(frame.subarray(0, header.byteLength + 1))[1]
-		let messages: readonly JSONRPCMessage[] = []
+		const initial = parseLSPMessages(frame.subarray(0, header.byteLength + 1))
 		const boundaries: Array<number | undefined> = []
 		const lengths: Array<number | undefined> = []
-
-		for (let index = header.byteLength + 1; index < frame.byteLength; index += 1) {
-			const decoded = parseLSPMessages(frame.subarray(index, index + 1), state)
-			messages = decoded[0]
-			state = decoded[1]
-			if (index + 1 < frame.byteLength) {
-				boundaries.push(state?.boundary)
-				lengths.push(state?.length)
-			}
-		}
+		const [messages, state] = frame
+			.subarray(header.byteLength + 1)
+			.reduce<ReturnType<typeof parseLSPMessages>>((previous, _, offset) => {
+				const index = header.byteLength + 1 + offset
+				const decoded = parseLSPMessages(frame.subarray(index, index + 1), previous[1])
+				if (index + 1 < frame.byteLength) {
+					boundaries.push(decoded[1]?.boundary)
+					lengths.push(decoded[1]?.length)
+				}
+				return decoded
+			}, initial)
 
 		expect(boundaries).toEqual(new Array(body.byteLength - 2).fill(header.byteLength - 4))
 		expect(lengths).toEqual(new Array(body.byteLength - 2).fill(body.byteLength))
@@ -230,12 +230,10 @@ describe('parseLSPMessages', () => {
 		frame.set(header, leading.byteLength)
 		frame.set(body, leading.byteLength + header.byteLength)
 
-		let thrown: unknown
-		try {
+		const outcome = attempt(() => {
 			parseLSPMessages(frame)
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		expect(thrown).toBeInstanceOf(LSPError)
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
@@ -250,12 +248,10 @@ describe('parseLSPMessages', () => {
 		chunk.set(leading)
 		chunk.set(header, leading.byteLength)
 
-		let thrown: unknown
-		try {
+		const outcome = attempt(() => {
 			parseLSPMessages(chunk)
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		expect(thrown).toBeInstanceOf(LSPError)
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
@@ -272,13 +268,10 @@ describe('parseLSPMessages', () => {
 		frame.set(leading)
 		frame.set(header, leading.byteLength)
 		frame.set(body, leading.byteLength + header.byteLength)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			parseLSPMessages(frame)
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		expect(thrown).toBeInstanceOf(LSPError)
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('protocol')
@@ -289,13 +282,10 @@ describe('parseLSPMessages', () => {
 	it('refuses a boundary-free header beyond the header limit', () => {
 		const chunk = new Uint8Array(LSP_HEADER_LIMIT + 1)
 		chunk.fill(65)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			parseLSPMessages(chunk)
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		expect(thrown).toBeInstanceOf(LSPError)
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')

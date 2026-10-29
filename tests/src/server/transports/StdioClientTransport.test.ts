@@ -4,8 +4,13 @@ import { StdioClientTransport } from '@src/server'
 import { createRecorder, requireValue, waitForCondition } from '@orkestrel/test'
 import { createScratch, destroyScratch, isRunning } from '@orkestrel/test/server'
 import {
+	ECHO,
 	FIXTURE_AMBIENT,
+	HOLD,
 	KILLED_EXIT,
+	ORPHAN,
+	PEER,
+	PING,
 	collectPeerMessages,
 	createHolderOptions,
 	createPeerOptions,
@@ -13,28 +18,38 @@ import {
 	readPeerPid,
 	readPeerResult,
 	readPeerShapes,
+	throwTransportListenerFault,
 	waitForReaped,
 } from '../../../setupServer.js'
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// A spawned interpreter, a round trip through its pipes, and a kill escalation all cost more than
-// the wait family's one-second default on a loaded host, so every peer wait carries this budget.
-const PEER = { budget: 5_000 }
-
-// A listener that always throws, so the `error` handler the options thread has a real throw to
-// receive. It sits at module scope because a function declared inside a case is refused.
-function throwListenerFault(): void {
-	throw new Error('the chunk listener threw')
-}
-
-const PING = encodeLSPMessage({ jsonrpc: '2.0', method: 'probe/ping' })
-const ECHO = encodeLSPMessage({ jsonrpc: '2.0', id: 1, method: 'probe/echo', params: {} })
-const HOLD = encodeLSPMessage({ jsonrpc: '2.0', id: 2, method: 'probe/hold', params: {} })
-const ORPHAN = encodeLSPMessage({ jsonrpc: '2.0', id: 3, method: 'probe/orphan', params: {} })
-
 describe('StdioClientTransport', () => {
+	it('settles a close issued inside the exit handler no earlier than the first close', async () => {
+		const chunks = createRecorder<[Uint8Array]>()
+		const order = createRecorder<[string]>()
+		const joined = Promise.withResolvers<void>()
+		const transport = new StdioClientTransport(createPeerOptions({ grace: 2_000 }))
+		transport.emitter.on('chunk', chunks.handler)
+		transport.emitter.on('exit', () => {
+			order.handler('exit')
+			void transport.close().then(() => {
+				order.handler('second')
+				joined.resolve()
+			}, joined.reject)
+		})
+		await transport.start()
+		try {
+			await waitForCondition('the peer ready frame', () => chunks.count >= 1, PEER)
+			const first = transport.close().then(() => order.handler('first'))
+			await Promise.all([first, joined.promise])
+			expect(order.calls.flat()).toEqual(['exit', 'first', 'second'])
+			expect(transport.pid).toBeUndefined()
+		} finally {
+			await transport.close()
+		}
+	})
 	it('wires the configured listeners and error handler at construction', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
 		const transport = new StdioClientTransport({
@@ -53,7 +68,7 @@ describe('StdioClientTransport', () => {
 		const faults = createRecorder<[unknown, string]>()
 		const faulty = new StdioClientTransport({
 			...createPeerOptions(),
-			on: { chunk: throwListenerFault },
+			on: { chunk: throwTransportListenerFault },
 			error: faults.handler,
 		})
 		await faulty.start()

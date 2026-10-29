@@ -1,18 +1,55 @@
 import type { JSONRPCNotification, LSPDecodeState } from '@src/core'
 import {
+	buildLSPSegment,
 	encodeLSPMessage,
 	isLSPError,
-	joinLSPSegments,
 	JSONRPC_INVALID_REQUEST,
 	JSONRPC_PARSE_ERROR,
 	LSP_CONTENT_LIMIT,
 	readLSPBody,
 	readLSPHeader,
 	scanLSPBoundary,
-	takeLSPTail,
 	waitForDeadline,
 } from '@src/core'
+import { attempt } from '@orkestrel/contract'
 import { describe, expect, it } from 'vitest'
+
+describe('buildLSPSegment', () => {
+	it('preserves the state identity for an empty chunk', () => {
+		const state: LSPDecodeState = { bytes: Uint8Array.of(1), size: 1 }
+		expect(buildLSPSegment(undefined, new Uint8Array(0))).toBeUndefined()
+		expect(buildLSPSegment(state, new Uint8Array(0))).toBe(state)
+	})
+
+	it('constructs a first segment with its byte size', () => {
+		expect(buildLSPSegment(undefined, Uint8Array.of(1, 2))).toEqual({
+			bytes: Uint8Array.of(1, 2),
+			size: 2,
+		})
+	})
+
+	it('links a header-phase segment without resolved framing metadata', () => {
+		const previous: LSPDecodeState = { bytes: Uint8Array.of(1), size: 1 }
+		const state = buildLSPSegment(previous, Uint8Array.of(2, 3))
+		expect(state).toEqual({ bytes: Uint8Array.of(2, 3), previous, size: 3 })
+		expect(state?.previous).toBe(previous)
+	})
+
+	it('links a body-phase segment with the same boundary and length', () => {
+		const previous: LSPDecodeState = { bytes: Uint8Array.of(1), size: 1, boundary: 20, length: 40 }
+		const state = buildLSPSegment(previous, Uint8Array.of(2))
+		expect(state).toEqual({ bytes: Uint8Array.of(2), previous, size: 2, boundary: 20, length: 40 })
+		expect(state?.previous).toBe(previous)
+	})
+
+	it('owns a copy unaffected by later chunk mutation', () => {
+		const chunk = Uint8Array.of(1, 2)
+		const state = buildLSPSegment(undefined, chunk)
+		expect(state?.bytes).not.toBe(chunk)
+		chunk.fill(0)
+		expect(state?.bytes).toEqual(Uint8Array.of(1, 2))
+	})
+})
 
 describe('encodeLSPMessage', () => {
 	it('measures Content-Length from encoded bytes including an astral code point', () => {
@@ -36,90 +73,14 @@ describe('encodeLSPMessage', () => {
 		const params: Record<string, unknown> = {}
 		params.self = params
 		const message: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized', params }
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			encodeLSPMessage(message)
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		expect(isLSPError(thrown)).toBe(true)
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('protocol')
 		expect(thrown.context?.code).toBe(JSONRPC_INVALID_REQUEST)
-	})
-})
-
-describe('joinLSPSegments', () => {
-	it('copies a single-segment state into an owned buffer', () => {
-		const bytes = Uint8Array.of(1, 2, 3)
-		const state: LSPDecodeState = { bytes, size: bytes.byteLength }
-
-		const joined = joinLSPSegments(state)
-
-		expect(Array.from(joined)).toEqual([1, 2, 3])
-		expect(joined).not.toBe(bytes)
-		joined.fill(0)
-		expect(Array.from(bytes)).toEqual([1, 2, 3])
-	})
-
-	it('concatenates a linked chain in arrival order', () => {
-		const first: LSPDecodeState = { bytes: Uint8Array.of(1, 2), size: 2 }
-		const second: LSPDecodeState = { bytes: Uint8Array.of(3), previous: first, size: 3 }
-		const third: LSPDecodeState = { bytes: Uint8Array.of(4, 5), previous: second, size: 5 }
-
-		const joined = joinLSPSegments(third)
-
-		expect(Array.from(joined)).toEqual([1, 2, 3, 4, 5])
-		joined.fill(0)
-		expect(Array.from(first.bytes)).toEqual([1, 2])
-		expect(Array.from(third.bytes)).toEqual([4, 5])
-	})
-})
-
-describe('takeLSPTail', () => {
-	it('takes a tail shorter than the newest segment', () => {
-		const first: LSPDecodeState = { bytes: Uint8Array.of(1, 2, 3), size: 3 }
-		const second: LSPDecodeState = { bytes: Uint8Array.of(4, 5, 6, 7), previous: first, size: 7 }
-
-		expect(Array.from(takeLSPTail(second, 2))).toEqual([6, 7])
-	})
-
-	it('spans segments when the newest holds fewer bytes than the count', () => {
-		const first: LSPDecodeState = { bytes: Uint8Array.of(1, 2, 3), size: 3 }
-		const second: LSPDecodeState = { bytes: Uint8Array.of(4), previous: first, size: 4 }
-		const third: LSPDecodeState = { bytes: Uint8Array.of(5), previous: second, size: 5 }
-
-		expect(Array.from(takeLSPTail(third, 3))).toEqual([3, 4, 5])
-	})
-
-	it('returns every retained byte when the count exceeds the chain', () => {
-		const first: LSPDecodeState = { bytes: Uint8Array.of(1), size: 1 }
-		const second: LSPDecodeState = { bytes: Uint8Array.of(2), previous: first, size: 2 }
-
-		expect(Array.from(takeLSPTail(second, 9))).toEqual([1, 2])
-	})
-
-	it('returns an empty buffer for a zero count', () => {
-		const state: LSPDecodeState = { bytes: Uint8Array.of(1, 2), size: 2 }
-
-		expect(takeLSPTail(state, 0).byteLength).toBe(0)
-	})
-
-	it('returns an owned buffer rather than a retained segment', () => {
-		const bytes = Uint8Array.of(1, 2)
-		const state: LSPDecodeState = { bytes, size: 2 }
-
-		const tail = takeLSPTail(state, 2)
-		tail.fill(0)
-
-		expect(Array.from(bytes)).toEqual([1, 2])
-	})
-
-	it('refuses a negative count', () => {
-		const state: LSPDecodeState = { bytes: Uint8Array.of(1), size: 1 }
-
-		expect(() => takeLSPTail(state, -1)).toThrow(RangeError)
 	})
 })
 
@@ -216,124 +177,94 @@ describe('readLSPHeader', () => {
 
 	it('refuses a non-ASCII byte inside an otherwise well-formed field', () => {
 		const header = new TextEncoder().encode('Content-Length: 2\r\nX-Note: café')
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses an empty header', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new Uint8Array(0), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a field without a colon', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new TextEncoder().encode('Content-Length'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a field without a name', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new TextEncoder().encode(': 2'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a header without a Content-Length', () => {
 		const header = new TextEncoder().encode('Content-Type: application/vscode-jsonrpc')
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a repeated Content-Length', () => {
 		const header = new TextEncoder().encode('Content-Length: 2\r\nContent-Length: 3')
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses an empty Content-Length', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new TextEncoder().encode('Content-Length:'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a Content-Length carrying a non-digit', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new TextEncoder().encode('Content-Length: 12a'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a Content-Length beyond safe integer precision', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new TextEncoder().encode('Content-Length: 99999999999999999999'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses a Content-Length above the content limit', () => {
 		const header = new TextEncoder().encode(`Content-Length: ${LSP_CONTENT_LIMIT + 1}`)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 		expect(thrown.context?.value).toBe(LSP_CONTENT_LIMIT + 1)
@@ -343,26 +274,20 @@ describe('readLSPHeader', () => {
 		const header = new TextEncoder().encode(
 			'Content-Length: 2\r\nContent-Type: application/vscode-jsonrpc\r\nContent-Type: application/vscode-jsonrpc',
 		)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses an unsupported media type', () => {
 		const header = new TextEncoder().encode('Content-Length: 2\r\nContent-Type: application/json')
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
@@ -371,13 +296,10 @@ describe('readLSPHeader', () => {
 		const header = new TextEncoder().encode(
 			'Content-Length: 2\r\nContent-Type: application/vscode-jsonrpc; charset',
 		)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
@@ -386,13 +308,10 @@ describe('readLSPHeader', () => {
 		const header = new TextEncoder().encode(
 			'Content-Length: 2\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8; charset=utf-8',
 		)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
@@ -401,13 +320,10 @@ describe('readLSPHeader', () => {
 		const header = new TextEncoder().encode(
 			'Content-Length: 2\r\nContent-Type: application/vscode-jsonrpc; charset=utf-16',
 		)
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(header, [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 		expect(thrown.context?.value).toBe('utf-16')
@@ -415,13 +331,10 @@ describe('readLSPHeader', () => {
 
 	it('attaches the messages decoded before the header to a refusal', () => {
 		const decoded: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPHeader(new TextEncoder().encode('X-Trace: 1'), [decoded])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.context?.messages).toEqual([decoded])
 		expect(Object.isFrozen(thrown.context?.messages)).toBe(true)
@@ -448,38 +361,29 @@ describe('readLSPBody', () => {
 	})
 
 	it('refuses content that is not valid UTF-8', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPBody(Uint8Array.of(123, 255, 125), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('framing')
 	})
 
 	it('refuses content that is not valid JSON', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPBody(new TextEncoder().encode('{'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('protocol')
 		expect(thrown.context?.code).toBe(JSONRPC_PARSE_ERROR)
 	})
 
 	it('refuses JSON that is not a JSON-RPC message', () => {
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPBody(new TextEncoder().encode('{"jsonrpc":"1.0","method":"initialized"}'), [])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('protocol')
 		expect(thrown.context?.code).toBe(JSONRPC_INVALID_REQUEST)
@@ -487,13 +391,10 @@ describe('readLSPBody', () => {
 
 	it('attaches the messages decoded before the body to a refusal', () => {
 		const decoded: JSONRPCNotification = { jsonrpc: '2.0', method: 'initialized' }
-		let thrown: unknown
-
-		try {
+		const outcome = attempt(() => {
 			readLSPBody(new TextEncoder().encode('{'), [decoded])
-		} catch (error) {
-			thrown = error
-		}
+		})
+		const thrown = outcome.success ? undefined : outcome.error
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.context?.messages).toEqual([decoded])
 		expect(Object.isFrozen(thrown.context?.messages)).toBe(true)

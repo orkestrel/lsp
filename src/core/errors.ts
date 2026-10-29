@@ -1,6 +1,7 @@
 import type { LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
-import { holds, isError } from '@orkestrel/contract'
+import { arrayOf, holds, INTRINSICS, isFunction, isInstance, isObject } from '@orkestrel/contract'
 import { LSP_ERROR_CODES } from './constants.js'
+import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse } from './validators.js'
 
 /**
  * Reports a package failure with a stable machine-readable category.
@@ -29,7 +30,7 @@ export class LSPError extends Error {
 	constructor(message: string, options: LSPErrorOptions) {
 		const cause = options.cause
 		super(message, cause === undefined ? undefined : { cause })
-		Object.defineProperty(this, Symbol.for('@orkestrel/lsp.error'), { value: true })
+		Object.defineProperty(this, Symbol.for('@orkestrel/lsp.error'), { value: this })
 		this.code = options.code
 		this.context = options.context === undefined ? undefined : Object.freeze({ ...options.context })
 	}
@@ -40,7 +41,9 @@ export class LSPError extends Error {
  *
  * @remarks
  * The accepted categories are read from {@link LSP_ERROR_CODES}, so the guard and the
- * {@link LSPErrorCode} union cannot disagree about which codes this package declares.
+ * {@link LSPErrorCode} union cannot disagree about which codes this package declares. An own
+ * identity brand accepts errors from another package copy and subclasses with a different name,
+ * and refuses transparent proxies. The context must satisfy its declared member types.
  *
  * @param value - The value to inspect.
  * @returns True if the value is an LSP error; false otherwise.
@@ -52,14 +55,30 @@ export class LSPError extends Error {
  * ```
  */
 export function isLSPError(value: unknown): value is LSPError {
-	if (!isError(value)) return false
 	return holds(() => {
-		if (Object.getPrototypeOf(value) === Error.prototype) return false
-		const code = Reflect.get(value, 'code')
+		if (!isInstance(value, Error) || INTRINSICS.prototype(value) === Error.prototype) return false
+		if (
+			!INTRINSICS.own(value, Symbol.for('@orkestrel/lsp.error')) ||
+			INTRINSICS.describe(value, Symbol.for('@orkestrel/lsp.error'))?.value !== value ||
+			typeof INTRINSICS.reflect.read(value, 'message') !== 'string'
+		)
+			return false
+		const code = INTRINSICS.reflect.read(value, 'code')
+		if (!LSP_ERROR_CODES.some((declared) => declared === code)) return false
+		const context = INTRINSICS.reflect.read(value, 'context')
+		if (context === undefined) return true
+		if (!isObject(context) && !isFunction(context)) return false
+		const detail = INTRINSICS.reflect.read(context, 'code')
+		const messages = INTRINSICS.reflect.read(context, 'messages')
 		return (
-			value.name === 'LSPError' &&
-			Object.getOwnPropertyDescriptor(value, Symbol.for('@orkestrel/lsp.error'))?.value === true &&
-			LSP_ERROR_CODES.some((declared) => declared === code)
+			(detail === undefined || typeof detail === 'number') &&
+			(messages === undefined ||
+				arrayOf(
+					(message) =>
+						isJSONRPCRequest(message) ||
+						isJSONRPCNotification(message) ||
+						isJSONRPCResponse(message),
+				)(messages))
 		)
 	})
 }

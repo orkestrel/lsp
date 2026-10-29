@@ -19,7 +19,7 @@ import {
 	PROTOCOL_RELEASE_LINE,
 	readConformanceDrift,
 	readFileDigest,
-} from './setupConformance.js'
+} from './setupServer.js'
 import { describe, expect, it } from 'vitest'
 
 describe('LSP method conformance', () => {

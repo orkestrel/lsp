@@ -273,6 +273,8 @@ export type LSPTransportEventMap = {
  * never reads a retired peer's bytes or exit as the live one's. An implementation whose peer can
  * outlive its own `close` — a child process whose descriptors a grandchild holds open — carries
  * that obligation itself; the client trusts every `exit` it receives.
+ * A chunk received while the client has no bound session is dropped. The package's own transport
+ * gates chunks on generation ownership and never produces that case.
  */
 export interface LSPTransportInterface {
 	readonly emitter: EmitterInterface<LSPTransportEventMap>

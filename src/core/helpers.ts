@@ -2,7 +2,7 @@ import type { JSONRPCMessage, LSPDecodeState } from './types.js'
 import { JSONRPC_INVALID_REQUEST, JSONRPC_PARSE_ERROR, LSP_CONTENT_LIMIT } from './constants.js'
 import { LSPError } from './errors.js'
 import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse } from './validators.js'
-import { isNumber, parseJSON } from '@orkestrel/contract'
+import { attempt, isNumber, parseJSON } from '@orkestrel/contract'
 
 /**
  * Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.
@@ -17,16 +17,15 @@ import { isNumber, parseJSON } from '@orkestrel/contract'
  * ```
  */
 export function encodeLSPMessage(message: JSONRPCMessage): Uint8Array {
-	let content: string | undefined
-	try {
-		content = JSON.stringify(message)
-	} catch (cause) {
+	const serialized = attempt(() => JSON.stringify(message))
+	if (!serialized.success) {
 		throw new LSPError('The JSON-RPC message cannot be serialized', {
 			code: 'protocol',
 			context: { code: JSONRPC_INVALID_REQUEST },
-			cause,
+			cause: serialized.error,
 		})
 	}
+	const content = serialized.value
 	if (content === undefined)
 		throw new LSPError('The JSON-RPC message cannot be serialized', {
 			code: 'protocol',
@@ -43,65 +42,31 @@ export function encodeLSPMessage(message: JSONRPCMessage): Uint8Array {
 }
 
 /**
- * Flattens the retained segments of a decode state into one owned buffer.
- *
- * @param state - The decode state whose segment chain is flattened.
- * @returns The retained bytes in arrival order, in a buffer no state node shares.
+ * Appends an owned byte segment while retaining the preceding framing metadata.
  *
  * @remarks
- * The result always owns its bytes, so mutating it never reaches the state. A state with no
- * `previous` node already holds every retained byte in `bytes`, so a caller that flattens on a hot
- * path reads `bytes` directly in that case and calls this only for a linked chain.
+ * An empty chunk preserves the preceding state by identity, including its absence.
  *
  * @example
  * ```ts
- * declare const state: LSPDecodeState
- *
- * const bytes = joinLSPSegments(state)
+ * const state = buildLSPSegment(undefined, new TextEncoder().encode('Content-'))
  * ```
  */
-export function joinLSPSegments(state: LSPDecodeState): Uint8Array {
-	const joined = new Uint8Array(state.size)
-	let cursor: LSPDecodeState | undefined = state
-	while (cursor !== undefined) {
-		joined.set(cursor.bytes, cursor.size - cursor.bytes.byteLength)
-		cursor = cursor.previous
+export function buildLSPSegment(
+	state: LSPDecodeState | undefined,
+	chunk: Uint8Array,
+): LSPDecodeState | undefined {
+	if (chunk.byteLength === 0) return state
+	if (state === undefined) return { bytes: chunk.slice(), size: chunk.byteLength }
+	if (state.boundary === undefined)
+		return { bytes: chunk.slice(), previous: state, size: state.size + chunk.byteLength }
+	return {
+		bytes: chunk.slice(),
+		previous: state,
+		size: state.size + chunk.byteLength,
+		boundary: state.boundary,
+		length: state.length,
 	}
-	return joined
-}
-
-/**
- * Takes the last retained bytes of a decode state as an owned buffer.
- *
- * @param state - The decode state whose segment chain is read backwards.
- * @param count - The most bytes to take. Must be zero or greater.
- * @returns The last `count` retained bytes, or every retained byte when the chain holds fewer.
- * @throws {@link RangeError} Thrown when `count` is negative, because a buffer of that length
- * cannot be allocated.
- *
- * @remarks
- * The walk stops at the first segment that satisfies `count`, so a scan window costs the window
- * rather than the chain.
- *
- * @example
- * ```ts
- * declare const state: LSPDecodeState
- *
- * const overlap = takeLSPTail(state, 3)
- * ```
- */
-export function takeLSPTail(state: LSPDecodeState, count: number): Uint8Array {
-	const size = Math.min(count, state.size)
-	const tail = new Uint8Array(size)
-	let cursor: LSPDecodeState | undefined = state
-	let remaining = size
-	while (cursor !== undefined && remaining > 0) {
-		const taken = Math.min(remaining, cursor.bytes.byteLength)
-		remaining -= taken
-		tail.set(cursor.bytes.subarray(cursor.bytes.byteLength - taken), remaining)
-		cursor = cursor.previous
-	}
-	return tail
 }
 
 /**
@@ -120,7 +85,8 @@ export function takeLSPTail(state: LSPDecodeState, count: number): Uint8Array {
  * ```
  */
 export function scanLSPBoundary(bytes: Uint8Array): number | undefined {
-	for (let index = 0; index + 3 < bytes.byteLength; index += 1) {
+	for (const index of bytes.keys()) {
+		if (index + 3 >= bytes.byteLength) break
 		if (
 			bytes[index] === 13 &&
 			bytes[index + 1] === 10 &&
@@ -157,7 +123,7 @@ export function readLSPHeader(
 	header: Uint8Array,
 	messages: readonly JSONRPCMessage[] = [],
 ): number {
-	for (let index = 0; index < header.byteLength; index += 1) {
+	for (const index of header.keys()) {
 		const byte = header[index]
 		if (byte === undefined || byte > 127)
 			throw new LSPError('The LSP header must contain ASCII bytes', {
@@ -168,106 +134,102 @@ export function readLSPHeader(
 
 	const headerText = new TextDecoder().decode(header)
 	const lines = headerText.split('\r\n')
-	let resolved: number | undefined
-	let contentType = false
-	for (let index = 0; index < lines.length; index += 1) {
-		const line = lines[index]
-		if (line === undefined) continue
-		const separator = line.indexOf(':')
-		if (separator <= 0)
-			throw new LSPError('The LSP header contains an invalid field', {
-				code: 'framing',
-				context: { messages: Object.freeze([...messages]) },
-			})
-		const name = line.slice(0, separator).trim().toLowerCase()
-		const field = line.slice(separator + 1).trim()
-		if (name === 'content-length') {
-			if (resolved !== undefined)
-				throw new LSPError('The LSP header repeats Content-Length', {
+	const fields = lines.reduce<{
+		readonly length: number | undefined
+		readonly content: boolean
+	}>(
+		(state, line) => {
+			const separator = line.indexOf(':')
+			if (separator <= 0)
+				throw new LSPError('The LSP header contains an invalid field', {
 					code: 'framing',
 					context: { messages: Object.freeze([...messages]) },
 				})
-			if (field.length === 0)
-				throw new LSPError('The LSP Content-Length is empty', {
-					code: 'framing',
-					context: { messages: Object.freeze([...messages]) },
-				})
-			for (let digitIndex = 0; digitIndex < field.length; digitIndex += 1) {
-				const digit = field.charCodeAt(digitIndex)
-				if (digit < 48 || digit > 57)
+			const name = line.slice(0, separator).trim().toLowerCase()
+			const field = line.slice(separator + 1).trim()
+			if (name === 'content-length') {
+				if (state.length !== undefined)
+					throw new LSPError('The LSP header repeats Content-Length', {
+						code: 'framing',
+						context: { messages: Object.freeze([...messages]) },
+					})
+				if (field.length === 0)
+					throw new LSPError('The LSP Content-Length is empty', {
+						code: 'framing',
+						context: { messages: Object.freeze([...messages]) },
+					})
+				if (/[^0-9]/u.test(field))
 					throw new LSPError('The LSP Content-Length is invalid', {
 						code: 'framing',
 						context: { messages: Object.freeze([...messages]) },
 					})
-			}
-			const parsed = Number(field)
-			if (!isNumber(parsed) || !Number.isSafeInteger(parsed))
-				throw new LSPError('The LSP Content-Length is invalid', {
-					code: 'framing',
-					context: { messages: Object.freeze([...messages]) },
-				})
-			if (parsed > LSP_CONTENT_LIMIT)
-				throw new LSPError('The LSP Content-Length exceeds the content limit', {
-					code: 'framing',
-					context: { messages: Object.freeze([...messages]), value: parsed },
-				})
-			resolved = parsed
-			continue
-		}
-		if (name === 'content-type') {
-			if (contentType)
-				throw new LSPError('The LSP header repeats Content-Type', {
-					code: 'framing',
-					context: { messages: Object.freeze([...messages]) },
-				})
-			contentType = true
-			const parts = field.split(';')
-			const media = parts[0]
-			if (media === undefined || media.trim().toLowerCase() !== 'application/vscode-jsonrpc')
-				throw new LSPError('The LSP Content-Type is unsupported', {
-					code: 'framing',
-					context: { messages: Object.freeze([...messages]) },
-				})
-			let charset = false
-			for (let partIndex = 1; partIndex < parts.length; partIndex += 1) {
-				const part = parts[partIndex]
-				if (part === undefined) continue
-				const equals = part.indexOf('=')
-				if (equals < 0)
-					throw new LSPError('The LSP Content-Type parameter is malformed', {
+				const parsed = Number(field)
+				if (!isNumber(parsed) || !Number.isSafeInteger(parsed))
+					throw new LSPError('The LSP Content-Length is invalid', {
 						code: 'framing',
 						context: { messages: Object.freeze([...messages]) },
 					})
-				const parameter = part.slice(0, equals).trim().toLowerCase()
-				if (parameter !== 'charset') continue
-				if (charset)
-					throw new LSPError('The LSP Content-Type repeats charset', {
+				if (parsed > LSP_CONTENT_LIMIT)
+					throw new LSPError('The LSP Content-Length exceeds the content limit', {
+						code: 'framing',
+						context: { messages: Object.freeze([...messages]), value: parsed },
+					})
+				return { length: parsed, content: state.content }
+			}
+			if (name === 'content-type') {
+				if (state.content)
+					throw new LSPError('The LSP header repeats Content-Type', {
 						code: 'framing',
 						context: { messages: Object.freeze([...messages]) },
 					})
-				charset = true
-				const encoding = part
-					.slice(equals + 1)
-					.trim()
-					.toLowerCase()
-				if (encoding !== 'utf-8' && encoding !== 'utf8')
-					throw new LSPError('The LSP Content-Type charset is unsupported', {
+				const parts = field.split(';')
+				const media = parts[0]
+				if (media === undefined || media.trim().toLowerCase() !== 'application/vscode-jsonrpc')
+					throw new LSPError('The LSP Content-Type is unsupported', {
 						code: 'framing',
-						context: {
-							messages: Object.freeze([...messages]),
-							value: encoding,
-						},
+						context: { messages: Object.freeze([...messages]) },
 					})
+				parts.slice(1).reduce((charset, part) => {
+					const equals = part.indexOf('=')
+					if (equals < 0)
+						throw new LSPError('The LSP Content-Type parameter is malformed', {
+							code: 'framing',
+							context: { messages: Object.freeze([...messages]) },
+						})
+					const parameter = part.slice(0, equals).trim().toLowerCase()
+					if (parameter !== 'charset') return charset
+					if (charset)
+						throw new LSPError('The LSP Content-Type repeats charset', {
+							code: 'framing',
+							context: { messages: Object.freeze([...messages]) },
+						})
+					const encoding = part
+						.slice(equals + 1)
+						.trim()
+						.toLowerCase()
+					if (encoding !== 'utf-8' && encoding !== 'utf8')
+						throw new LSPError('The LSP Content-Type charset is unsupported', {
+							code: 'framing',
+							context: {
+								messages: Object.freeze([...messages]),
+								value: encoding,
+							},
+						})
+					return true
+				}, false)
+				return { length: state.length, content: true }
 			}
-		}
-	}
+			return state
+		},
+		{ length: undefined, content: false },
+	)
 
-	if (resolved === undefined)
+	if (fields.length === undefined)
 		throw new LSPError('The LSP header requires Content-Length', {
 			code: 'framing',
 			context: { messages: Object.freeze([...messages]) },
 		})
-	return resolved
+	return fields.length
 }
 
 /**
@@ -290,17 +252,15 @@ export function readLSPBody(
 	body: Uint8Array,
 	messages: readonly JSONRPCMessage[] = [],
 ): JSONRPCMessage {
-	let text: string
-	try {
-		text = new TextDecoder('utf-8', { fatal: true }).decode(body)
-	} catch (cause) {
+	const decoded = attempt(() => new TextDecoder('utf-8', { fatal: true }).decode(body))
+	if (!decoded.success) {
 		throw new LSPError('The LSP content is not valid UTF-8', {
 			code: 'framing',
 			context: { messages: Object.freeze([...messages]) },
-			cause,
+			cause: decoded.error,
 		})
 	}
-	const parsed = parseJSON(text)
+	const parsed = parseJSON(decoded.value)
 	if (parsed === undefined)
 		throw new LSPError('The LSP content is not valid JSON', {
 			code: 'protocol',

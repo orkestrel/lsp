@@ -50,7 +50,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	#session: SessionInterface | undefined = undefined
 	#generation = 0
 	#owner: number | undefined = undefined
-	#closing: Promise<void> | undefined = undefined
+	readonly #closings = new Set<Promise<void>>()
 
 	/**
 	 * Creates a stdio transport over the configured child process.
@@ -94,7 +94,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 		// standard output can still deliver bytes through a grandchild holding the pipe. Comparing the
 		// owner against the current generation is what refuses a replacement inside that window; a
 		// liveness reading reports the child dead there and would hand the successor a shared owner.
-		if (this.#owner === this.#generation || this.#closing !== undefined)
+		if (this.#owner === this.#generation || this.#closings.size > 0)
 			throw new LSPError('The stdio transport has not retired its previous child generation', {
 				code: 'duplicate',
 			})
@@ -143,16 +143,16 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	 * delays neither this call nor the `exit` event.
 	 */
 	async close(): Promise<void> {
-		const closing = this.#closing
+		const [closing] = this.#closings
 		if (closing !== undefined) return await closing
 		const session = this.#session
 		if (session === undefined || this.#owner !== this.#generation) return
 		const settling = this.#settle(session, this.#generation)
-		this.#closing = settling
+		this.#closings.add(settling)
 		try {
 			await settling
 		} finally {
-			this.#closing = undefined
+			this.#closings.delete(settling)
 		}
 	}
 
@@ -245,7 +245,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	// inside `stop` even when that termination went unconfirmed, so retiring from this event would
 	// release the refusal window that a `timeout`-coded close keeps open over a still-live child.
 	#conclude(generation: number, exit: ProcessExit): void {
-		if (!this.#owns(generation) || this.#closing !== undefined) return
+		if (!this.#owns(generation) || this.#closings.size > 0) return
 		this.#retire(generation, { code: exit.code, signal: exit.signal })
 	}
 
