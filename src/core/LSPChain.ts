@@ -45,8 +45,9 @@ export class LSPChain implements IterableIterator<LSPDecodeState> {
 	/** Takes at most the requested final bytes, refusing a negative allocation length. */
 	tail(count: number): Uint8Array {
 		const size = Math.min(count, this.#head.size)
-		const start = this.#head.size - size
 		const tail = new Uint8Array(size)
+		if (size === 0) return tail
+		const start = this.#head.size - size
 		for (const segment of this) {
 			const begin = segment.size - segment.bytes.byteLength
 			if (segment.size <= start) break

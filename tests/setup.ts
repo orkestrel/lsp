@@ -1,5 +1,6 @@
 import type {
 	JSONRPCMessage,
+	JSONRPCNotification,
 	JSONRPCRequest,
 	LSPDecodeState,
 	LSPExit,
@@ -17,6 +18,12 @@ import {
 } from '@src/core'
 import { Emitter } from '@orkestrel/emitter'
 import { resolveRoot, waitForDelay } from '@orkestrel/test'
+
+/** Carries a notification as a class instance for declared-message checks. */
+export class LSPNotice implements JSONRPCNotification {
+	readonly jsonrpc = '2.0' as const
+	readonly method = 'initialized'
+}
 
 /** Resolves the workspace root from this module's conventional `tests/` location. */
 export const WORKSPACE_ROOT = resolveRoot(import.meta)

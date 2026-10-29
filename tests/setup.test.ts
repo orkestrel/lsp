@@ -9,6 +9,7 @@ describe('setup', () => {
 				'createFactoryTransport',
 				'LookalikeError',
 				'LSPFixtureTransport',
+				'LSPNotice',
 				'LSPObservation',
 				'LSP_FRAME_REFUSALS',
 				'WireRange',

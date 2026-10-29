@@ -1,7 +1,6 @@
-import type { LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
+import type { JSONRPCMessage, LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
 import { arrayOf, holds, INTRINSICS, isFunction, isInstance, isObject } from '@orkestrel/contract'
 import { LSP_ERROR_CODES } from './constants.js'
-import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse } from './validators.js'
 
 /**
  * Reports a package failure with a stable machine-readable category.
@@ -73,11 +72,35 @@ export function isLSPError(value: unknown): value is LSPError {
 		return (
 			(detail === undefined || typeof detail === 'number') &&
 			(messages === undefined ||
-				arrayOf(
-					(message) =>
-						isJSONRPCRequest(message) ||
-						isJSONRPCNotification(message) ||
-						isJSONRPCResponse(message),
+				arrayOf((message): message is JSONRPCMessage =>
+					holds(() => {
+						if (!isObject(message) && !isFunction(message)) return false
+						if (INTRINSICS.reflect.read(message, 'jsonrpc') !== '2.0') return false
+						const id = INTRINSICS.reflect.read(message, 'id')
+						const identified = typeof id === 'string' || typeof id === 'number'
+						if (
+							holds(() => {
+								if (typeof INTRINSICS.reflect.read(message, 'method') !== 'string') return false
+								const params = INTRINSICS.reflect.read(message, 'params')
+								return (
+									(id === undefined || identified) &&
+									(params === undefined || isObject(params) || isFunction(params))
+								)
+							})
+						)
+							return true
+						const error = INTRINSICS.reflect.read(message, 'error')
+						const result = INTRINSICS.reflect.read(message, 'result')
+						if (error === undefined)
+							return identified && INTRINSICS.reflect.present(message, 'result')
+						return (
+							(id === null || identified) &&
+							result === undefined &&
+							(isObject(error) || isFunction(error)) &&
+							typeof INTRINSICS.reflect.read(error, 'code') === 'number' &&
+							typeof INTRINSICS.reflect.read(error, 'message') === 'string'
+						)
+					}),
 				)(messages))
 		)
 	})

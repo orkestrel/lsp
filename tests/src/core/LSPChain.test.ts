@@ -30,6 +30,18 @@ describe('joinLSPSegments', () => {
 })
 
 describe('takeLSPTail', () => {
+	it('returns a zero tail without reading a throwing previous getter', () => {
+		expect(
+			new LSPChain({
+				bytes: Uint8Array.of(1),
+				size: 1,
+				get previous(): LSPDecodeState {
+					throw new Error('previous must not be read')
+				},
+			}).tail(0),
+		).toEqual(new Uint8Array(0))
+	})
+
 	it('takes a tail shorter than the newest segment', () => {
 		const first: LSPDecodeState = { bytes: Uint8Array.of(1, 2, 3), size: 3 }
 		const second: LSPDecodeState = { bytes: Uint8Array.of(4, 5, 6, 7), previous: first, size: 7 }
