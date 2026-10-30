@@ -378,7 +378,7 @@ The server surface provides these exports.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
-| Export                          | Kind      | Shape                                                                     | Summary                                                                                 |
+| Name                            | Kind      | Shape                                                                     | Summary                                                                                 |
 | ------------------------------- | --------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `StdioClientTransport`          | class     | `StdioClientTransportInterface`                                           | Streams Language Server Protocol bytes between a client and a child process over stdio. |
 | `createStdioClientTransport`    | function  | `(options: StdioClientTransportOptions) => StdioClientTransportInterface` | Creates a byte transport over a Language Server Protocol child process.                 |
@@ -391,7 +391,7 @@ The client surface provides these entities and configuration contracts.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
-| Export                  | Kind      | Shape                                                                                                                                                                                                 | Summary                                                                               |
+| Name                    | Kind      | Shape                                                                                                                                                                                                 | Summary                                                                               |
 | ----------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `LSPClient`             | class     | `LSPClientInterface`                                                                                                                                                                                  | Drives a Language Server Protocol peer through an injected byte transport.            |
 | `createLSPClient`       | function  | `(options: LSPClientOptions) => LSPClientInterface`                                                                                                                                                   | Creates a transport-agnostic Language Server Protocol client.                         |
@@ -416,7 +416,7 @@ when their members conform, and message arrays are checked by index without runn
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
-| Export             | Kind      | Shape                                                                                                                               | Summary                                                                                     |
+| Name               | Kind      | Shape                                                                                                                               | Summary                                                                                     |
 | ------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `encodeLSPMessage` | function  | `(message: JSONRPCMessage) => Uint8Array`                                                                                           | Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.                    |
 | `parseLSPMessages` | function  | `(chunk: Uint8Array, state?: LSPDecodeState) => readonly [messages: readonly JSONRPCMessage[], state: LSPDecodeState \| undefined]` | Parses a byte chunk into complete LSP base-protocol messages and retained decode state.     |
@@ -439,7 +439,7 @@ The JSON-RPC and initialization surface provides these payload types.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
 
-| Export                  | Kind      | Shape                                                           | Summary                                                                       |
+| Name                    | Kind      | Shape                                                           | Summary                                                                       |
 | ----------------------- | --------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `JSONRPCId`             | type      | `string \| number`                                              | Identifies a JSON-RPC request and its matching response.                      |
 | `JSONRPCRequest`        | interface | `{ jsonrpc, id, method, params? }`                              | Describes a JSON-RPC 2.0 method call that requires a response.                |
@@ -461,7 +461,7 @@ The document and diagnostic surface provides these payload types.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
 
-| Export                        | Kind      | Shape                                                                                                | Summary                                                                                                |
+| Name                          | Kind      | Shape                                                                                                | Summary                                                                                                |
 | ----------------------------- | --------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `LSPDocumentURI`              | type      | `string`                                                                                             | Identifies a document by its Language Server Protocol URI.                                             |
 | `LSPPosition`                 | interface | `{ line, character }`                                                                                | Describes a zero-based position inside a text document.                                                |
@@ -489,7 +489,7 @@ The validation surface provides these guards.
 
 In a guard table a `Shape` cell holds the type the guard narrows to.
 
-| Export                          | Kind     | Shape                         | Summary                                                                         |
+| Name                            | Kind     | Shape                         | Summary                                                                         |
 | ------------------------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------- |
 | `isJSONRPCError`                | function | `JSONRPCError`                | Checks whether an unknown value is a JSON-RPC error payload.                    |
 | `isJSONRPCRequest`              | function | `JSONRPCRequest`              | Checks whether an unknown value is a JSON-RPC request.                          |
@@ -518,7 +518,7 @@ The constant surface provides these protocol names, advertisements, and limits.
 
 A `Shape` cell holds the constant's declared type.
 
-| Export                      | Kind  | Shape                                | Summary                                                                                    |
+| Name                        | Kind  | Shape                                | Summary                                                                                    |
 | --------------------------- | ----- | ------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `LSP_METHODS`               | const | `Readonly<Record<string, string>>`   | Names the Language Server Protocol methods this client sends or consumes.                  |
 | `LSP_ENCODINGS`             | const | `readonly string[]`                  | Lists the position encodings named by Language Server Protocol 3.18.                       |
