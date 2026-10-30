@@ -163,10 +163,10 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 		// own ending was promised.
 		const cooperative = waitForDeadline(this.#grace)
 		await Promise.race([session.end(), cooperative])
-		// `ending` settles at the child's own exit, while `exit` waits out the window a grandchild
+		// `ended` settles at the child's own exit, while `exit` waits out the window a grandchild
 		// holding the pipe opens, so racing `exit` here would escalate against a child that already
 		// left.
-		await Promise.race([session.ending, cooperative])
+		await Promise.race([session.ended, cooperative])
 		if (session.code === null && session.signal === null) {
 			// The following rejection is unproven. A POSIX host cannot refuse SIGKILL, so no real child
 			// drives a false return here: a fixture that ignores SIGTERM reports a confirmed stop at
@@ -222,7 +222,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 		session.emitter.on('error', reported.resolve)
 		// A refused spawn reports its host cause on the session's `error` event before the child's
 		// ending settles, so that ending bounds the wait for the cause rather than a timer of its own.
-		const cause = await Promise.race([reported.promise, session.ending])
+		const cause = await Promise.race([reported.promise, session.ended])
 		await session.destroy()
 		return new LSPError('The stdio transport could not spawn its server', { code: 'spawn', cause })
 	}
