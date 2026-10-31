@@ -30,7 +30,7 @@ export class LSPError extends Error {
 	constructor(message: string, options: LSPErrorOptions) {
 		const cause = options.cause
 		super(message, cause === undefined ? undefined : { cause })
-		Object.defineProperty(this, Symbol.for('@orkestrel/lsp.error'), { value: this })
+		Object.defineProperty(this, Symbol.for('@orkestrel/lsp.LSPError'), { value: this })
 		this.code = options.code
 		this.context = options.context === undefined ? undefined : Object.freeze({ ...options.context })
 	}
@@ -58,8 +58,8 @@ export function isLSPError(value: unknown): value is LSPError {
 	return holds(() => {
 		if (!isInstance(value, Error) || INTRINSICS.prototype(value) === Error.prototype) return false
 		if (
-			!INTRINSICS.own(value, Symbol.for('@orkestrel/lsp.error')) ||
-			INTRINSICS.describe(value, Symbol.for('@orkestrel/lsp.error'))?.value !== value ||
+			!INTRINSICS.own(value, Symbol.for('@orkestrel/lsp.LSPError')) ||
+			INTRINSICS.describe(value, Symbol.for('@orkestrel/lsp.LSPError'))?.value !== value ||
 			typeof INTRINSICS.reflect.read(value, 'message') !== 'string'
 		)
 			return false

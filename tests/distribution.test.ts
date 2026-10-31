@@ -800,7 +800,7 @@ const modules = [
 	require('./lsp-copy/dist/src/core/index.cjs'),
 ]
 assert.equal(new Set(modules.map((entry) => entry.LSPError)).size, modules.length)
-const brand = Symbol.for('@orkestrel/lsp.error')
+const brand = Symbol.for('@orkestrel/lsp.LSPError')
 for (const source of modules) {
 	const error = new source.LSPError('failure', {
 		code: 'framing',
