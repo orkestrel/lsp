@@ -1,4 +1,5 @@
-import type { JSONRPCMessage, LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
+import type { LSPErrorCode, LSPErrorContext, LSPErrorOptions } from './types.js'
 import { arrayOf, holds, INTRINSICS, isFunction, isInstance, isObject } from '@orkestrel/contract'
 import { LSP_ERROR_CODES } from './constants.js'
 

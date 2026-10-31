@@ -1,8 +1,4 @@
 import {
-	isJSONRPCError,
-	isJSONRPCNotification,
-	isJSONRPCRequest,
-	isJSONRPCResponse,
 	isLSPCodeDescription,
 	isLSPDiagnostic,
 	isLSPDiagnosticOptions,
@@ -22,42 +18,6 @@ import {
 import { describe, expect, it } from 'vitest'
 
 import { LookalikeError, WireRange } from '../../setup.js'
-
-describe('JSON-RPC guards', () => {
-	it('accepts each envelope arm and refuses overlapping arms', () => {
-		expect(isJSONRPCRequest({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).toBe(true)
-		expect(isJSONRPCNotification({ jsonrpc: '2.0', method: 'initialized' })).toBe(true)
-		expect(isJSONRPCResponse({ jsonrpc: '2.0', id: 'request', result: null })).toBe(true)
-		expect(
-			isJSONRPCResponse({
-				jsonrpc: '2.0',
-				id: null,
-				error: { code: -32700, message: 'Parse error' },
-			}),
-		).toBe(true)
-		expect(isJSONRPCError({ code: -32603, message: 'Internal error', data: null })).toBe(true)
-		expect(
-			isJSONRPCResponse({
-				jsonrpc: '2.0',
-				id: 1,
-				result: null,
-				error: { code: -32603, message: 'Internal error' },
-			}),
-		).toBe(false)
-	})
-
-	it('returns false for null, primitives, arrays, and wrong-typed members', () => {
-		for (const value of [null, undefined, true, 1, 'message', []]) {
-			expect(isJSONRPCRequest(value)).toBe(false)
-			expect(isJSONRPCNotification(value)).toBe(false)
-			expect(isJSONRPCResponse(value)).toBe(false)
-		}
-		expect(isJSONRPCRequest({ jsonrpc: '2.0', id: null, method: 'initialize' })).toBe(false)
-		expect(isJSONRPCNotification({ jsonrpc: '2.0', method: 1 })).toBe(false)
-		expect(isJSONRPCResponse({ jsonrpc: '2.0', id: 1, error: 'failed' })).toBe(false)
-		expect(isJSONRPCError({ code: '-32603', message: 'Internal error' })).toBe(false)
-	})
-})
 
 describe('LSP wire guards', () => {
 	it('accepts the diagnostic and initialization structures this client reads', () => {

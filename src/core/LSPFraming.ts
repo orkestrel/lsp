@@ -1,4 +1,5 @@
-import type { JSONRPCMessage, LSPDecodeState } from './types.js'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
+import type { LSPDecodeState } from './types.js'
 import { LSP_HEADER_LIMIT } from './constants.js'
 import { LSPError } from './errors.js'
 import { readLSPBody, readLSPHeader, scanLSPBoundary } from './helpers.js'

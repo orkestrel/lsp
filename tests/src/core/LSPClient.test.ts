@@ -1,13 +1,7 @@
-import type { JSONRPCMessage, JSONRPCRequest, LSPExit, LSPTextDocumentSyncKind } from '@src/core'
-import {
-	encodeLSPMessage,
-	isJSONRPCRequest,
-	isLSPError,
-	JSONRPC_METHOD_NOT_FOUND,
-	LSPClient,
-	LSPError,
-	LSP_METHODS,
-} from '@src/core'
+import type { JSONRPCMessage, JSONRPCRequest } from '@orkestrel/jsonrpc'
+import type { LSPExit, LSPTextDocumentSyncKind } from '@src/core'
+import { encodeLSPMessage, isLSPError, LSPClient, LSPError, LSP_METHODS } from '@src/core'
+import { isJSONRPCRequest, JSONRPC_METHOD_NOT_FOUND } from '@orkestrel/jsonrpc'
 import { LSPFixtureTransport, LSPObservation } from '../../setup.js'
 import { createRecorder, waitForDelay } from '@orkestrel/test'
 import { describe, expect, it } from 'vitest'

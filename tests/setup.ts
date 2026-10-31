@@ -1,7 +1,5 @@
+import type { JSONRPCMessage, JSONRPCNotification, JSONRPCRequest } from '@orkestrel/jsonrpc'
 import type {
-	JSONRPCMessage,
-	JSONRPCNotification,
-	JSONRPCRequest,
 	LSPDecodeState,
 	LSPExit,
 	LSPServerCapabilities,
@@ -10,13 +8,13 @@ import type {
 } from '@src/core'
 import {
 	encodeLSPMessage,
-	isJSONRPCRequest,
 	LSP_METHODS,
 	LSP_HEADER_LIMIT,
 	LSP_CONTENT_LIMIT,
 	parseLSPMessages,
 } from '@src/core'
 import { Emitter } from '@orkestrel/emitter'
+import { isJSONRPCRequest } from '@orkestrel/jsonrpc'
 import { resolveRoot, waitForDelay } from '@orkestrel/test'
 
 /** Carries a notification as a class instance for declared-message checks. */

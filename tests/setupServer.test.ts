@@ -1,4 +1,4 @@
-import type { JSONRPCMessage } from '@src/core'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
 import {
 	CONFORMANCE_MODEL,
 	META_MODEL_DIGEST,

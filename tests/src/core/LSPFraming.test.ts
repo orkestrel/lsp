@@ -1,4 +1,5 @@
-import type { JSONRPCMessage, LSPDecodeState } from '@src/core'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
+import type { LSPDecodeState } from '@src/core'
 import { buildLSPSegment, encodeLSPMessage, isLSPError } from '@src/core'
 import { LSPFraming } from '../../../src/core/LSPFraming.js'
 import { LSP_FRAME_REFUSALS } from '../../setup.js'

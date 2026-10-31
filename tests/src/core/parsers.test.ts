@@ -1,13 +1,13 @@
-import type { JSONRPCMessage, JSONRPCNotification } from '@src/core'
+import type { JSONRPCMessage, JSONRPCNotification } from '@orkestrel/jsonrpc'
 import {
 	encodeLSPMessage,
 	isLSPError,
-	JSONRPC_PARSE_ERROR,
 	LSP_CONTENT_LIMIT,
 	LSPError,
 	LSP_HEADER_LIMIT,
 	parseLSPMessages,
 } from '@src/core'
+import { JSONRPC_PARSE_ERROR } from '@orkestrel/jsonrpc'
 import { attempt } from '@orkestrel/contract'
 import { describe, expect, it } from 'vitest'
 

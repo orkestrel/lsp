@@ -1,10 +1,10 @@
 import type { EmitterInterface } from '@orkestrel/emitter'
 import type { LSPExit, LSPTransportEventMap } from '@src/core'
-import type { ProcessExit, SessionInterface } from '@orkestrel/process'
+import type { ProcessExit, DuplexInterface } from '@orkestrel/process'
 import type { LSPStdioTransportInterface, LSPStdioTransportOptions } from '../types.js'
 import { Emitter } from '@orkestrel/emitter'
 import { LSPError, waitForDeadline } from '@src/core'
-import { createSession } from '@orkestrel/process/server'
+import { createDuplex } from '@orkestrel/process/server'
 
 /**
  * Streams Language Server Protocol bytes between a client and a child process over stdio.
@@ -47,7 +47,7 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 	readonly #directory: string | undefined
 	readonly #environment: Readonly<Record<string, string | undefined>> | undefined
 	readonly #grace: number
-	#session: SessionInterface | undefined = undefined
+	#duplex: DuplexInterface | undefined = undefined
 	#generation = 0
 	#owner: number | undefined = undefined
 	readonly #closings = new Set<Promise<void>>()
@@ -77,7 +77,7 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 	}
 
 	get pid(): number | undefined {
-		return this.#owner === this.#generation ? this.#session?.pid : undefined
+		return this.#owner === this.#generation ? this.#duplex?.pid : undefined
 	}
 
 	/**
@@ -102,13 +102,13 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 		if (file === undefined || file.length === 0)
 			throw new LSPError('The stdio transport requires a command executable', { code: 'spawn' })
 		const generation = this.#generation
-		const session = this.#open(file, parameters, generation)
-		// The session spawns eagerly and the host fixes the child's identifier before construction
+		const duplex = this.#open(file, parameters, generation)
+		// The duplex spawns eagerly and the host fixes the child's identifier before construction
 		// returns, so an absent identifier is a spawn the host refused rather than one still in
 		// flight. Taking ownership only past this reading is what keeps a refused spawn off the
-		// emitter, because every session callback is gated on the generation it owns.
-		if (session.pid === undefined) throw await this.#refuse(session)
-		this.#session = session
+		// emitter, because every duplex callback is gated on the generation it owns.
+		if (duplex.pid === undefined) throw await this.#refuse(duplex)
+		this.#duplex = duplex
 		this.#owner = generation
 	}
 
@@ -119,12 +119,12 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 	 * @returns True if the child's input channel accepted the bytes; false otherwise.
 	 */
 	async send(bytes: Uint8Array): Promise<boolean> {
-		const session = this.#session
+		const duplex = this.#duplex
 		// A child the host has recorded as ended accepts nothing further, and its input channel can
 		// stay writable past that moment while a descendant holds the pipe open, so the refusal is
 		// read from the terminal facts rather than from the channel alone.
-		if (session === undefined || session.code !== null || session.signal !== null) return false
-		return await session.write(bytes)
+		if (duplex === undefined || duplex.code !== null || duplex.signal !== null) return false
+		return await duplex.write(bytes)
 	}
 
 	/**
@@ -135,7 +135,7 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 	 * stopped; the transport keeps the still-live child, so a later `start` is still refused.
 	 * @remarks Closing the child's input channel is the cooperative signal a conformant language
 	 * server answers by exiting, and it terminates nothing on its own. A child still live after
-	 * `grace` is handed to the session's `stop`, which signals the child's process group and
+	 * `grace` is handed to the duplex's `stop`, which signals the child's process group and
 	 * escalates to an unconditional kill after `grace` on a POSIX host, and ends the child's tree
 	 * through the host's `taskkill` utility on Windows. A second `close` called while the first is in
 	 * flight settles on that same termination rather than resolving early. The wait for the child's
@@ -145,9 +145,9 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 	async close(): Promise<void> {
 		const [closing] = this.#closings
 		if (closing !== undefined) return await closing
-		const session = this.#session
-		if (session === undefined || this.#owner !== this.#generation) return
-		const settling = this.#settle(session, this.#generation)
+		const duplex = this.#duplex
+		if (duplex === undefined || this.#owner !== this.#generation) return
+		const settling = this.#settle(duplex, this.#generation)
 		this.#closings.add(settling)
 		try {
 			await settling
@@ -156,41 +156,41 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 		}
 	}
 
-	async #settle(session: SessionInterface, generation: number): Promise<void> {
+	async #settle(duplex: DuplexInterface, generation: number): Promise<void> {
 		// One deadline bounds the whole cooperative phase, because the transport documents one
 		// `grace` rather than a window per step: a child that stops reading its input holds the
 		// channel's flush open, and a second timer would let that flush spend the window the child's
 		// own ending was promised.
 		const cooperative = waitForDeadline(this.#grace)
-		await Promise.race([session.end(), cooperative])
+		await Promise.race([duplex.end(), cooperative])
 		// `ended` settles at the child's own exit, while `exit` waits out the window a grandchild
 		// holding the pipe opens, so racing `exit` here would escalate against a child that already
 		// left.
-		await Promise.race([session.ended, cooperative])
-		if (session.code === null && session.signal === null) {
+		await Promise.race([duplex.ended, cooperative])
+		if (duplex.code === null && duplex.signal === null) {
 			// The following rejection is unproven. A POSIX host cannot refuse SIGKILL, so no real child
 			// drives a false return here: a fixture that ignores SIGTERM reports a confirmed stop at
-			// a zero window and at a graced one alike, and simulating the session would prove nothing
+			// a zero window and at a graced one alike, and simulating the duplex would prove nothing
 			// about it. A host that can hold a process past SIGKILL closes the gap — a Windows tree
 			// whose kill utility fails, or a process blocked in the kernel — so the branch waits on
 			// that host joining the suite's matrix.
-			const stopped = await session.stop()
+			const stopped = await duplex.stop()
 			if (!stopped)
 				throw new LSPError('The stdio transport could not confirm its child process stopped', {
 					code: 'timeout',
-					context: { value: session.pid },
+					context: { value: duplex.pid },
 				})
 		}
-		const exit = await session.exit
+		const exit = await duplex.exit
 		this.#retire(generation, { code: exit.code, signal: exit.signal })
-		await session.destroy()
+		await duplex.destroy()
 	}
 
-	#open(file: string, parameters: readonly string[], generation: number): SessionInterface {
+	#open(file: string, parameters: readonly string[], generation: number): DuplexInterface {
 		const directory = this.#directory
 		const environment = this.#environment
 		try {
-			return createSession({
+			return createDuplex({
 				command: {
 					file,
 					arguments: parameters,
@@ -217,13 +217,13 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 		}
 	}
 
-	async #refuse(session: SessionInterface): Promise<LSPError> {
+	async #refuse(duplex: DuplexInterface): Promise<LSPError> {
 		const reported = Promise.withResolvers<unknown>()
-		session.emitter.on('error', reported.resolve)
-		// A refused spawn reports its host cause on the session's `error` event before the child's
+		duplex.emitter.on('error', reported.resolve)
+		// A refused spawn reports its host cause on the duplex's `error` event before the child's
 		// ending settles, so that ending bounds the wait for the cause rather than a timer of its own.
-		const cause = await Promise.race([reported.promise, session.ended])
-		await session.destroy()
+		const cause = await Promise.race([reported.promise, duplex.ended])
+		await duplex.destroy()
 		return new LSPError('The stdio transport could not spawn its server', { code: 'spawn', cause })
 	}
 
@@ -241,7 +241,7 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 		this.#emitter.emit('error', fault)
 	}
 
-	// A close in flight owns its generation's retirement. The session reaches its terminal moment
+	// A close in flight owns its generation's retirement. The duplex reaches its terminal moment
 	// inside `stop` even when that termination went unconfirmed, so retiring from this event would
 	// release the refusal window that a `timeout`-coded close keeps open over a still-live child.
 	#conclude(generation: number, exit: ProcessExit): void {
@@ -250,7 +250,7 @@ export class LSPStdioTransport implements LSPStdioTransportInterface {
 	}
 
 	// Retiring a generation is what makes its `exit` fire exactly once: the first settlement to
-	// arrive — the session's own terminal moment or the bounded wait inside `#settle` — advances the
+	// arrive — the duplex's own terminal moment or the bounded wait inside `#settle` — advances the
 	// counter, and every later listener carrying the retired number returns before it emits.
 	#retire(generation: number, exit: LSPExit): void {
 		if (generation !== this.#generation) return

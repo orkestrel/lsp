@@ -1,58 +1,11 @@
 import type { EmitterErrorHandler, EmitterHooks, EmitterInterface } from '@orkestrel/emitter'
+import type { JSONRPCMessage, JSONRPCNotification } from '@orkestrel/jsonrpc'
 import type {
 	LSP_DIAGNOSTIC_SEVERITIES,
 	LSP_DIAGNOSTIC_TAGS,
 	LSP_ERROR_CODES,
 	LSP_SYNC_KINDS,
 } from './constants.js'
-
-/** Identifies a JSON-RPC request and its matching response. */
-export type JSONRPCId = string | number
-
-/** Describes a JSON-RPC 2.0 method call that requires a response. */
-export interface JSONRPCRequest {
-	readonly jsonrpc: '2.0'
-	readonly id: JSONRPCId
-	readonly method: string
-	readonly params?: Readonly<Record<string, unknown>>
-}
-
-/** Describes a JSON-RPC 2.0 method call that permits no response. */
-export interface JSONRPCNotification {
-	readonly jsonrpc: '2.0'
-	readonly method: string
-	readonly id?: never
-	readonly params?: Readonly<Record<string, unknown>>
-}
-
-/** Describes the error payload carried by a JSON-RPC error response. */
-export interface JSONRPCError {
-	readonly code: number
-	readonly message: string
-	readonly data?: unknown
-}
-
-/** Describes a successful JSON-RPC 2.0 response. */
-export interface JSONRPCResultResponse {
-	readonly jsonrpc: '2.0'
-	readonly id: JSONRPCId
-	readonly result: unknown
-	readonly error?: never
-}
-
-/** Describes a failed JSON-RPC 2.0 response. */
-export interface JSONRPCErrorResponse {
-	readonly jsonrpc: '2.0'
-	readonly id: JSONRPCId | null
-	readonly error: JSONRPCError
-	readonly result?: never
-}
-
-/** Describes either outcome of a JSON-RPC 2.0 request. */
-export type JSONRPCResponse = JSONRPCResultResponse | JSONRPCErrorResponse
-
-/** Describes one complete JSON-RPC 2.0 wire message. */
-export type JSONRPCMessage = JSONRPCRequest | JSONRPCNotification | JSONRPCResponse
 
 /** Identifies a document by its Language Server Protocol URI. */
 export type LSPDocumentURI = string

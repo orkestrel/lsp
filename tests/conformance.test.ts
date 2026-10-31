@@ -1,4 +1,5 @@
 import * as core from '@src/core'
+import * as jsonrpc from '@orkestrel/jsonrpc'
 import { LSP_ENCODINGS, LSP_METHODS } from '@src/core'
 import {
 	CONFORMANCE_DECLARED_RANGE,
@@ -50,10 +51,10 @@ describe('LSP method conformance', () => {
 })
 
 describe('LSP numeral conformance', () => {
-	it('covers every negative numeral the core barrel exports', () => {
+	it('covers every negative numeral the core barrel exports or imports from @orkestrel/jsonrpc', () => {
 		expect(new Set(CONFORMANCE_NUMERALS.map((row) => row.symbol))).toStrictEqual(
 			new Set(
-				Object.entries(core)
+				[...Object.entries(core), ...Object.entries(jsonrpc)]
 					.filter(([, value]) => typeof value === 'number' && value < 0)
 					.map(([name]) => name),
 			),

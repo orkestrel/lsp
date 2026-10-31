@@ -43,14 +43,9 @@ await new GuideCommand({
 	const { isRecord, parseJSON } = await import('@orkestrel/contract')
 	const { computeSymbolKey, findMissingSymbols } = await import('@orkestrel/guide')
 	const { requireValue } = await import('@orkestrel/test')
-	const {
-		encodeLSPMessage,
-		isJSONRPCNotification,
-		LSP_CAPABILITIES,
-		readLSPBody,
-		readLSPHeader,
-		scanLSPBoundary,
-	} = await import('@src/core')
+	const { encodeLSPMessage, LSP_CAPABILITIES, readLSPBody, readLSPHeader, scanLSPBoundary } =
+		await import('@src/core')
+	const { isJSONRPCNotification } = await import('@orkestrel/jsonrpc')
 	const { describe, expect, it } = await import('vitest')
 	const own = requireValue(
 		rows.find((row) => row.entry.spec === GUIDE_SPEC),

@@ -1,5 +1,5 @@
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
 import type {
-	JSONRPCMessage,
 	LSPDecodeState,
 	LSPDiagnostic,
 	LSPDocumentURI,

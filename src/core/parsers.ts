@@ -1,4 +1,5 @@
-import type { JSONRPCMessage, LSPDecodeState } from './types.js'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
+import type { LSPDecodeState } from './types.js'
 import { buildLSPSegment } from './helpers.js'
 import { LSPFraming } from './LSPFraming.js'
 

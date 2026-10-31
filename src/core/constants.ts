@@ -68,21 +68,6 @@ export const LSP_CAPABILITIES = Object.freeze({
 /** Names the default request-settlement timeout, `30_000` milliseconds. */
 export const LSP_TIMEOUT = 30_000
 
-/** Identifies a malformed JSON payload, `-32700`. */
-export const JSONRPC_PARSE_ERROR = -32700
-
-/** Identifies a structurally invalid JSON-RPC request, `-32600`. */
-export const JSONRPC_INVALID_REQUEST = -32600
-
-/** Identifies a JSON-RPC method that the receiver does not provide, `-32601`. */
-export const JSONRPC_METHOD_NOT_FOUND = -32601
-
-/** Identifies invalid parameters supplied to a JSON-RPC method, `-32602`. */
-export const JSONRPC_INVALID_PARAMS = -32602
-
-/** Identifies an internal JSON-RPC receiver failure, `-32603`. */
-export const JSONRPC_INTERNAL_ERROR = -32603
-
 /** Identifies a Language Server Protocol request cancelled by the client, `-32800`. */
 export const LSP_REQUEST_CANCELLED = -32800
 

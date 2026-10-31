@@ -5,6 +5,8 @@ import type {
 	JSONRPCNotification,
 	JSONRPCRequest,
 	JSONRPCResponse,
+} from '@orkestrel/jsonrpc'
+import type {
 	LSPClientEventMap,
 	LSPClientInterface,
 	LSPClientLifecycle,
@@ -23,18 +25,17 @@ import type {
 } from './types.js'
 import { Emitter } from '@orkestrel/emitter'
 import {
+	buildJSONRPCError,
+	isJSONRPCNotification,
+	isJSONRPCRequest,
+	isJSONRPCResponse,
 	JSONRPC_METHOD_NOT_FOUND,
-	LSP_CAPABILITIES,
-	LSP_METHODS,
-	LSP_TIMEOUT,
-} from './constants.js'
+} from '@orkestrel/jsonrpc'
+import { LSP_CAPABILITIES, LSP_METHODS, LSP_TIMEOUT } from './constants.js'
 import { LSPError, isLSPError } from './errors.js'
 import { encodeLSPMessage, waitForDeadline } from './helpers.js'
 import { LSPSession } from './LSPSession.js'
 import {
-	isJSONRPCNotification,
-	isJSONRPCRequest,
-	isJSONRPCResponse,
 	isLSPDocumentDiagnosticReport,
 	isLSPInitializeResult,
 	isLSPPublishDiagnosticsParams,
@@ -494,14 +495,13 @@ export class LSPClient implements LSPClientInterface {
 	}
 
 	#respondUnsupported(request: JSONRPCRequest): void {
-		this.#send({
-			jsonrpc: '2.0',
-			id: request.id,
-			error: {
-				code: JSONRPC_METHOD_NOT_FOUND,
-				message: `Method not found: ${request.method}`,
-			},
-		}).then(
+		this.#send(
+			buildJSONRPCError(
+				request.id,
+				JSONRPC_METHOD_NOT_FOUND,
+				`Method not found: ${request.method}`,
+			),
+		).then(
 			(written) => {
 				if (!written)
 					this.#emitter.emit(

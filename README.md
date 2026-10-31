@@ -1,7 +1,7 @@
 # @orkestrel/lsp
 
 > A typed Language Server Protocol client over an injected byte transport: a host-independent core
-> carrying the base-protocol framing codec, the JSON-RPC and protocol guards, and an `LSPClient`
+> carrying the base-protocol framing codec, the protocol guards, and an `LSPClient`
 > that completes the initialize handshake, owns opened document URIs, and selects pull or push
 > diagnostics from the server's own capabilities, beside a server environment whose
 > `LSPStdioTransport` carries those bytes over a language server run as a child process.

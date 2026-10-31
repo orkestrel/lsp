@@ -1,16 +1,16 @@
-import type { JSONRPCNotification, LSPDecodeState } from '@src/core'
+import type { JSONRPCNotification } from '@orkestrel/jsonrpc'
+import type { LSPDecodeState } from '@src/core'
 import {
 	buildLSPSegment,
 	encodeLSPMessage,
 	isLSPError,
-	JSONRPC_INVALID_REQUEST,
-	JSONRPC_PARSE_ERROR,
 	LSP_CONTENT_LIMIT,
 	readLSPBody,
 	readLSPHeader,
 	scanLSPBoundary,
 	waitForDeadline,
 } from '@src/core'
+import { JSONRPC_INVALID_REQUEST, JSONRPC_PARSE_ERROR } from '@orkestrel/jsonrpc'
 import { attempt } from '@orkestrel/contract'
 import { describe, expect, it } from 'vitest'
 
@@ -387,6 +387,39 @@ describe('readLSPBody', () => {
 		if (!isLSPError(thrown)) throw new Error('Expected a branded LSP error')
 		expect(thrown.code).toBe('protocol')
 		expect(thrown.context?.code).toBe(JSONRPC_INVALID_REQUEST)
+	})
+
+	it('refuses a fractional id and a non-integer error code', () => {
+		const encoder = new TextEncoder()
+		for (const body of [
+			'{"jsonrpc":"2.0","id":1.5,"method":"workspace/configuration"}',
+			'{"jsonrpc":"2.0","id":1.5,"result":null}',
+			'{"jsonrpc":"2.0","id":1,"error":{"code":-32601.5,"message":"Method not found"}}',
+		]) {
+			const outcome = attempt(() => {
+				readLSPBody(encoder.encode(body), [])
+			})
+			const thrown = outcome.success ? undefined : outcome.error
+			if (!isLSPError(thrown)) throw new Error(`Expected a branded LSP error for ${body}`)
+			expect(thrown.code).toBe('protocol')
+			expect(thrown.context?.code).toBe(JSONRPC_INVALID_REQUEST)
+		}
+		expect(readLSPBody(encoder.encode('{"jsonrpc":"2.0","id":1,"result":null}'))).toStrictEqual({
+			jsonrpc: '2.0',
+			id: 1,
+			result: null,
+		})
+		expect(
+			readLSPBody(
+				encoder.encode(
+					'{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}}',
+				),
+			),
+		).toStrictEqual({
+			jsonrpc: '2.0',
+			id: null,
+			error: { code: -32700, message: 'Parse error' },
+		})
 	})
 
 	it('attaches the messages decoded before the body to a refusal', () => {

@@ -3,11 +3,6 @@ import type { ESTree } from 'vite'
 import type { LSPDiagnosticSeverity, LSPDiagnosticTag, LSPTextDocumentSyncKind } from '@src/core'
 import type { Diagnostic as InstalledDiagnostic } from 'vscode-languageserver-protocol'
 import {
-	JSONRPC_INTERNAL_ERROR,
-	JSONRPC_INVALID_PARAMS,
-	JSONRPC_INVALID_REQUEST,
-	JSONRPC_METHOD_NOT_FOUND,
-	JSONRPC_PARSE_ERROR,
 	LSP_CONTENT_MODIFIED,
 	LSP_ENCODINGS,
 	LSP_METHODS,
@@ -29,6 +24,13 @@ import {
 	isLSPTextDocumentSyncOptions,
 } from '@src/core'
 import { attempt, isArray, isRecord } from '@orkestrel/contract'
+import {
+	JSONRPC_INTERNAL_ERROR,
+	JSONRPC_INVALID_PARAMS,
+	JSONRPC_INVALID_REQUEST,
+	JSONRPC_METHOD_NOT_FOUND,
+	JSONRPC_PARSE_ERROR,
+} from '@orkestrel/jsonrpc'
 import { createHash } from 'node:crypto'
 import { globSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -57,7 +59,8 @@ import {
 	TextDocumentSyncKind,
 } from 'vscode-languageserver-protocol'
 
-import type { JSONRPCMessage, LSPDecodeState, LSPExit } from '@src/core'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
+import type { LSPDecodeState, LSPExit } from '@src/core'
 import type { LSPStdioTransportOptions } from '@src/server'
 import { encodeLSPMessage, parseLSPMessages } from '@src/core'
 import { isRunning } from '@orkestrel/test/server'

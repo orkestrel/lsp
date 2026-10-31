@@ -1,7 +1,8 @@
-import type { JSONRPCMessage, LSPDecodeState } from './types.js'
-import { JSONRPC_INVALID_REQUEST, JSONRPC_PARSE_ERROR, LSP_CONTENT_LIMIT } from './constants.js'
+import type { JSONRPCMessage } from '@orkestrel/jsonrpc'
+import type { LSPDecodeState } from './types.js'
+import { LSP_CONTENT_LIMIT } from './constants.js'
 import { LSPError } from './errors.js'
-import { isJSONRPCNotification, isJSONRPCRequest, isJSONRPCResponse } from './validators.js'
+import { isJSONRPCMessage, JSONRPC_INVALID_REQUEST, JSONRPC_PARSE_ERROR } from '@orkestrel/jsonrpc'
 import { attempt, isNumber, parseJSON } from '@orkestrel/contract'
 
 /**
@@ -266,8 +267,7 @@ export function readLSPBody(
 			code: 'protocol',
 			context: { code: JSONRPC_PARSE_ERROR, messages: Object.freeze([...messages]) },
 		})
-	if (isJSONRPCRequest(parsed) || isJSONRPCNotification(parsed) || isJSONRPCResponse(parsed))
-		return parsed
+	if (isJSONRPCMessage(parsed)) return parsed
 	throw new LSPError('The LSP content is not a valid JSON-RPC message', {
 		code: 'protocol',
 		context: { code: JSONRPC_INVALID_REQUEST, messages: Object.freeze([...messages]) },

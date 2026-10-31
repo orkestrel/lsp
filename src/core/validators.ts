@@ -1,9 +1,5 @@
 import type { Guard } from '@orkestrel/contract'
 import type {
-	JSONRPCError,
-	JSONRPCNotification,
-	JSONRPCRequest,
-	JSONRPCResponse,
 	LSPCodeDescription,
 	LSPDiagnostic,
 	LSPDiagnosticOptions,
@@ -77,99 +73,6 @@ export const isLSPDiagnosticTag: Guard<LSPDiagnosticTag> = literalOf(LSP_DIAGNOS
  * ```
  */
 export const isLSPTextDocumentSyncKind: Guard<LSPTextDocumentSyncKind> = literalOf(LSP_SYNC_KINDS)
-
-/**
- * Checks whether an unknown value is a JSON-RPC error payload.
- *
- * @param value - The value to inspect.
- * @returns True if the value is a JSON-RPC error payload; false otherwise.
- *
- * @example
- * ```ts
- * isJSONRPCError({ code: -32601, message: 'Method not found' }) // true
- * isJSONRPCError({ code: -32601 }) // false
- * ```
- */
-export function isJSONRPCError(value: unknown): value is JSONRPCError {
-	if (!isRecord(value)) return false
-	return holds(() => isNumber(value.code) && isString(value.message))
-}
-
-/**
- * Checks whether an unknown value is a JSON-RPC request.
- *
- * @param value - The value to inspect.
- * @returns True if the value is a JSON-RPC request; false otherwise.
- *
- * @example
- * ```ts
- * isJSONRPCRequest({ jsonrpc: '2.0', id: 1, method: 'initialize' }) // true
- * isJSONRPCRequest({ jsonrpc: '2.0', method: 'initialized' }) // false
- * ```
- */
-export function isJSONRPCRequest(value: unknown): value is JSONRPCRequest {
-	if (!isRecord(value)) return false
-	return holds(
-		() =>
-			value.jsonrpc === '2.0' &&
-			(isString(value.id) || isNumber(value.id)) &&
-			isString(value.method) &&
-			(value.params === undefined || isRecord(value.params)) &&
-			!('result' in value) &&
-			!('error' in value),
-	)
-}
-
-/**
- * Checks whether an unknown value is a JSON-RPC notification.
- *
- * @param value - The value to inspect.
- * @returns True if the value is a JSON-RPC notification; false otherwise.
- *
- * @example
- * ```ts
- * isJSONRPCNotification({ jsonrpc: '2.0', method: 'initialized' }) // true
- * isJSONRPCNotification({ jsonrpc: '2.0', id: 1, method: 'initialize' }) // false
- * ```
- */
-export function isJSONRPCNotification(value: unknown): value is JSONRPCNotification {
-	if (!isRecord(value)) return false
-	return holds(
-		() =>
-			value.jsonrpc === '2.0' &&
-			!('id' in value) &&
-			isString(value.method) &&
-			(value.params === undefined || isRecord(value.params)) &&
-			!('result' in value) &&
-			!('error' in value),
-	)
-}
-
-/**
- * Checks whether an unknown value is a JSON-RPC response.
- *
- * @param value - The value to inspect.
- * @returns True if the value is a JSON-RPC response; false otherwise.
- *
- * @example
- * ```ts
- * isJSONRPCResponse({ jsonrpc: '2.0', id: 1, result: null }) // true
- * isJSONRPCResponse({ jsonrpc: '2.0', id: 1, method: 'initialize' }) // false
- * ```
- */
-export function isJSONRPCResponse(value: unknown): value is JSONRPCResponse {
-	if (!isRecord(value)) return false
-	return holds(() => {
-		if (value.jsonrpc !== '2.0' || 'method' in value) return false
-		const result = 'result' in value
-		const error = 'error' in value
-		if (result === error) return false
-		if (result) return isString(value.id) || isNumber(value.id)
-		return (
-			(value.id === null || isString(value.id) || isNumber(value.id)) && isJSONRPCError(value.error)
-		)
-	})
-}
 
 /**
  * Checks whether an unknown value is an LSP position.

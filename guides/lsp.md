@@ -1,7 +1,7 @@
 # Language Server Protocol client
 
 > A typed Language Server Protocol client over an injected byte transport: a host-independent core
-> carrying the base-protocol framing codec, the JSON-RPC and protocol guards, and an `LSPClient`
+> carrying the base-protocol framing codec, the protocol guards, and an `LSPClient`
 > that completes the initialize handshake, owns opened document URIs, and selects pull or push
 > diagnostics from the server's own capabilities, beside a server environment whose
 > `LSPStdioTransport` carries those bytes over a language server run as a child process.
@@ -91,7 +91,8 @@ obligation.
 Drive that seam directly to carry one frame without a client:
 
 ```ts
-import type { JSONRPCNotification, LSPTransportInterface } from '@orkestrel/lsp'
+import type { JSONRPCNotification } from '@orkestrel/jsonrpc'
+import type { LSPTransportInterface } from '@orkestrel/lsp'
 import { encodeLSPMessage } from '@orkestrel/lsp'
 
 declare const transport: LSPTransportInterface
@@ -150,7 +151,7 @@ await client.destroy()
 `grace` bounds the cooperative termination window in milliseconds, and `5000` applies when it is
 absent. `close()` closes the child's input channel, waits `grace` for that closure's flush and the
 child's own ending together on one shared deadline rather than a window for each, and hands a child
-that outlives that window to the process package session's `stop`, which signals the
+that outlives that window to the process package duplex's `stop`, which signals the
 child's process group and escalates to an unconditional kill after `grace` again. The child leads
 its own process group on a POSIX host, so that signal reaches its whole tree; Windows carries no
 such group, so the host's `taskkill` utility ends the tree there instead. `close()` then waits up to
@@ -247,7 +248,9 @@ if (boundary !== undefined) {
 ## Validation
 
 Every payload this package reads off the wire arrives as `unknown`, so each guard narrows one
-shape and returns `false` for anything else. Narrow a decoded frame by its JSON-RPC role:
+shape and returns `false` for anything else. The JSON-RPC 2.0 envelope types, guards, and error
+codes the codec and the client read come from `@orkestrel/jsonrpc`, so narrow a decoded frame by
+its JSON-RPC role through that package:
 
 ```ts
 import {
@@ -255,7 +258,7 @@ import {
 	isJSONRPCNotification,
 	isJSONRPCRequest,
 	isJSONRPCResponse,
-} from '@orkestrel/lsp'
+} from '@orkestrel/jsonrpc'
 
 declare const message: unknown
 declare const payload: unknown
@@ -433,22 +436,15 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 | `LSPErrorContext`  | interface | `{ code?, messages?, value? }`                                                                                                                                                                                                                                                                     | Describes structured details attached to an `LSPError`.                                     |
 | `LSPErrorOptions`  | interface | `{ code, context?, cause? }`                                                                                                                                                                                                                                                                       | Configures an `LSPError` instance.                                                          |
 
-### JSON-RPC and initialization
+### Initialization
 
-The JSON-RPC and initialization surface provides these payload types.
+The initialization surface provides these payload types. `@orkestrel/jsonrpc` provides the
+JSON-RPC 2.0 envelope types.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
 
 | Name                    | Kind      | Signature                                                                                               | Summary                                                                       |
 | ----------------------- | --------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `JSONRPCId`             | type      | `string \| number`                                                                                      | Identifies a JSON-RPC request and its matching response.                      |
-| `JSONRPCRequest`        | interface | `{ jsonrpc, id, method, params? }`                                                                      | Describes a JSON-RPC 2.0 method call that requires a response.                |
-| `JSONRPCNotification`   | interface | `{ jsonrpc, method, id?, params? }`                                                                     | Describes a JSON-RPC 2.0 method call that permits no response.                |
-| `JSONRPCError`          | interface | `{ code, message, data? }`                                                                              | Describes the error payload carried by a JSON-RPC error response.             |
-| `JSONRPCResultResponse` | interface | `{ jsonrpc, id, result, error? }`                                                                       | Describes a successful JSON-RPC 2.0 response.                                 |
-| `JSONRPCErrorResponse`  | interface | `{ jsonrpc, id, error, result? }`                                                                       | Describes a failed JSON-RPC 2.0 response.                                     |
-| `JSONRPCResponse`       | type      | `JSONRPCResultResponse \| JSONRPCErrorResponse`                                                         | Describes either outcome of a JSON-RPC 2.0 request.                           |
-| `JSONRPCMessage`        | type      | `JSONRPCRequest \| JSONRPCNotification \| JSONRPCResponse`                                              | Describes one complete JSON-RPC 2.0 wire message.                             |
 | `LSPIdentity`           | interface | `{ name, version? }`                                                                                    | Describes the name and optional version of an LSP peer.                       |
 | `LSPInitializeParams`   | interface | `{ processId, clientInfo?, rootUri, capabilities }`                                                     | Describes the initialization members sent by this client.                     |
 | `LSPInitializeResult`   | interface | `{ capabilities, serverInfo? }`                                                                         | Describes the successful result of an initialize request.                     |
@@ -485,16 +481,13 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 
 ### Guards
 
-The validation surface provides these guards.
+The validation surface provides these guards. `@orkestrel/jsonrpc` provides the JSON-RPC 2.0
+envelope guards.
 
 In a guard table a `Shape` cell holds the type the guard narrows to.
 
 | Name                            | Kind     | Signature                                                  | Summary                                                                         |
 | ------------------------------- | -------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `isJSONRPCError`                | function | `(value: unknown) => value is JSONRPCError`                | Checks whether an unknown value is a JSON-RPC error payload.                    |
-| `isJSONRPCRequest`              | function | `(value: unknown) => value is JSONRPCRequest`              | Checks whether an unknown value is a JSON-RPC request.                          |
-| `isJSONRPCNotification`         | function | `(value: unknown) => value is JSONRPCNotification`         | Checks whether an unknown value is a JSON-RPC notification.                     |
-| `isJSONRPCResponse`             | function | `(value: unknown) => value is JSONRPCResponse`             | Checks whether an unknown value is a JSON-RPC response.                         |
 | `isLSPPosition`                 | function | `(value: unknown) => value is LSPPosition`                 | Checks whether an unknown value is an LSP position.                             |
 | `isLSPRange`                    | function | `(value: unknown) => value is LSPRange`                    | Checks whether an unknown value is an LSP range.                                |
 | `isLSPLocation`                 | function | `(value: unknown) => value is LSPLocation`                 | Checks whether an unknown value is an LSP location.                             |
@@ -515,6 +508,7 @@ In a guard table a `Shape` cell holds the type the guard narrows to.
 ### Constants
 
 The constant surface provides these protocol names, advertisements, and limits.
+`@orkestrel/jsonrpc` provides the JSON-RPC 2.0 error codes, and this table lists the LSP-specific ones.
 
 A `Shape` cell holds the constant's declared type.
 
@@ -528,11 +522,6 @@ A `Shape` cell holds the constant's declared type.
 | `LSP_SYNC_KINDS`            | const | `readonly [0, 1, 2]`                                                                                                                                                                                                                                                                                                                                                   | Lists the text synchronization modes named by the Language Server Protocol.                |
 | `LSP_CAPABILITIES`          | const | `Readonly<{ general: Readonly<{ positionEncodings: readonly string[]; }>; textDocument: Readonly<{ synchronization: Readonly<{}>; publishDiagnostics: Readonly<{}>; diagnostic: Readonly<{}>; }>; }>`                                                                                                                                                                  | Describes the capabilities this client advertises in its initialize request.               |
 | `LSP_TIMEOUT`               | const | `30000`                                                                                                                                                                                                                                                                                                                                                                | Names the default request-settlement timeout, `30_000` milliseconds.                       |
-| `JSONRPC_PARSE_ERROR`       | const | `-32700`                                                                                                                                                                                                                                                                                                                                                               | Identifies a malformed JSON payload, `-32700`.                                             |
-| `JSONRPC_INVALID_REQUEST`   | const | `-32600`                                                                                                                                                                                                                                                                                                                                                               | Identifies a structurally invalid JSON-RPC request, `-32600`.                              |
-| `JSONRPC_METHOD_NOT_FOUND`  | const | `-32601`                                                                                                                                                                                                                                                                                                                                                               | Identifies a JSON-RPC method that the receiver does not provide, `-32601`.                 |
-| `JSONRPC_INVALID_PARAMS`    | const | `-32602`                                                                                                                                                                                                                                                                                                                                                               | Identifies invalid parameters supplied to a JSON-RPC method, `-32602`.                     |
-| `JSONRPC_INTERNAL_ERROR`    | const | `-32603`                                                                                                                                                                                                                                                                                                                                                               | Identifies an internal JSON-RPC receiver failure, `-32603`.                                |
 | `LSP_REQUEST_CANCELLED`     | const | `-32800`                                                                                                                                                                                                                                                                                                                                                               | Identifies a Language Server Protocol request cancelled by the client, `-32800`.           |
 | `LSP_CONTENT_MODIFIED`      | const | `-32801`                                                                                                                                                                                                                                                                                                                                                               | Identifies a request invalidated by modified document content, `-32801`.                   |
 | `LSP_SERVER_CANCELLED`      | const | `-32802`                                                                                                                                                                                                                                                                                                                                                               | Identifies a Language Server Protocol request cancelled by the server, `-32802`.           |
