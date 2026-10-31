@@ -379,8 +379,6 @@ const first = chain.next()
 
 The server surface provides these exports.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
-
 | Name                         | Kind      | Signature                                                               | Summary                                                                                 |
 | ---------------------------- | --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `LSPStdioTransport`          | class     | `new (options: LSPStdioTransportOptions) => LSPStdioTransportInterface` | Streams Language Server Protocol bytes between a client and a child process over stdio. |
@@ -391,8 +389,6 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 ### Client and transport contracts
 
 The client surface provides these entities and configuration contracts.
-
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
 | Name                    | Kind      | Signature                                                                                                                                                                                                                                                                                                                                                            | Summary                                                                               |
 | ----------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -417,8 +413,6 @@ The framing, timing, and error surface provides these exports.
 It checks the declared code and context members; context objects and callable contexts are accepted
 when their members conform, and message arrays are checked by index without running their iterator.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
-
 | Name               | Kind      | Signature                                                                                                                                                                                                                                                                                          | Summary                                                                                     |
 | ------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `encodeLSPMessage` | function  | `(message: JSONRPCMessage) => Uint8Array`                                                                                                                                                                                                                                                          | Encodes a JSON-RPC message as one byte-accurate LSP base-protocol frame.                    |
@@ -441,8 +435,6 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 The initialization surface provides these payload types. `@orkestrel/jsonrpc` provides the
 JSON-RPC 2.0 envelope types.
 
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
-
 | Name                    | Kind      | Signature                                                                                               | Summary                                                                       |
 | ----------------------- | --------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `LSPIdentity`           | interface | `{ name, version? }`                                                                                    | Describes the name and optional version of an LSP peer.                       |
@@ -454,8 +446,6 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 ### Documents and diagnostics
 
 The document and diagnostic surface provides these payload types.
-
-A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`.
 
 | Name                          | Kind      | Signature                                                                                                                                                        | Summary                                                                                                |
 | ----------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -484,8 +474,6 @@ A `Shape` cell holds an interface's data members as bare names in braces, `?` ma
 The validation surface provides these guards. `@orkestrel/jsonrpc` provides the JSON-RPC 2.0
 envelope guards.
 
-In a guard table a `Shape` cell holds the type the guard narrows to.
-
 | Name                            | Kind     | Signature                                                  | Summary                                                                         |
 | ------------------------------- | -------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `isLSPPosition`                 | function | `(value: unknown) => value is LSPPosition`                 | Checks whether an unknown value is an LSP position.                             |
@@ -509,8 +497,6 @@ In a guard table a `Shape` cell holds the type the guard narrows to.
 
 The constant surface provides these protocol names, advertisements, and limits.
 `@orkestrel/jsonrpc` provides the JSON-RPC 2.0 error codes, and this table lists the LSP-specific ones.
-
-A `Shape` cell holds the constant's declared type.
 
 | Name                        | Kind  | Signature                                                                                                                                                                                                                                                                                                                                                              | Summary                                                                                    |
 | --------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
