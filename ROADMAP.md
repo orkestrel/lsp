@@ -141,7 +141,7 @@ The pending release runs in layer order. The process package publishes its addit
 surface first. The lsp package then restores its process dependency from the recorded
 tarball to the registry release, re-runs its gates against the registry artifact, bumps
 for its moved surface, and republishes. The probe package then re-pins lsp, adopts
-`createStdioClientTransport`, and its republished guide refreshes the vendored mirror.
+`createLSPStdioTransport`, and its republished guide refreshes the vendored mirror.
 
 - **`SocketClientTransport`.** One `node:net` class whose `server` option group carries
   `{ host, port }` or `{ path }`. A consumer that must attach to a language server it

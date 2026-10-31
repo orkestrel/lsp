@@ -1,7 +1,7 @@
 import type { EmitterInterface } from '@orkestrel/emitter'
 import type { LSPExit, LSPTransportEventMap } from '@src/core'
 import type { ProcessExit, SessionInterface } from '@orkestrel/process'
-import type { StdioClientTransportInterface, StdioClientTransportOptions } from '../types.js'
+import type { LSPStdioTransportInterface, LSPStdioTransportOptions } from '../types.js'
 import { Emitter } from '@orkestrel/emitter'
 import { LSPError, waitForDeadline } from '@src/core'
 import { createSession } from '@orkestrel/process/server'
@@ -36,12 +36,12 @@ import { createSession } from '@orkestrel/process/server'
  *
  * @example
  * ```ts
- * const transport = new StdioClientTransport({ server: { command: ['my-server', '--stdio'] } })
+ * const transport = new LSPStdioTransport({ server: { command: ['my-server', '--stdio'] } })
  * await transport.start()
  * await transport.close()
  * ```
  */
-export class StdioClientTransport implements StdioClientTransportInterface {
+export class LSPStdioTransport implements LSPStdioTransportInterface {
 	readonly #emitter: Emitter<LSPTransportEventMap>
 	readonly #command: readonly string[]
 	readonly #directory: string | undefined
@@ -58,7 +58,7 @@ export class StdioClientTransport implements StdioClientTransportInterface {
 	 * @param options - The child's initial event hooks, listener-error handler, command, working
 	 * directory, environment, and grace window.
 	 */
-	constructor(options: StdioClientTransportOptions) {
+	constructor(options: LSPStdioTransportOptions) {
 		this.#emitter = new Emitter<LSPTransportEventMap>({
 			...(options.on === undefined ? {} : { on: options.on }),
 			...(options.error === undefined ? {} : { error: options.error }),

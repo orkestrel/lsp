@@ -1,6 +1,6 @@
 import { createLSPClient } from '@src/core'
 import { LSPObservation } from './setup.js'
-import { createStdioClientTransport } from '@src/server'
+import { createLSPStdioTransport } from '@src/server'
 import { requireValue } from '@orkestrel/test'
 import { destroyScratch, createScratch, isRunning } from '@orkestrel/test/server'
 import {
@@ -20,7 +20,7 @@ describe('core client over the server stdio transport', () => {
 	// idle one.
 	it('reads a real Oxlint diagnostic through the client and leaves no child behind', async () => {
 		const scratch = createScratch({ prefix: 'lsp-oxlint-', files: OXLINT_FILES })
-		const transport = createStdioClientTransport(createOxlintOptions(scratch.path, 2_000))
+		const transport = createLSPStdioTransport(createOxlintOptions(scratch.path, 2_000))
 		const client = createLSPClient({
 			transport,
 			workspace: pathToFileURL(scratch.path).href,

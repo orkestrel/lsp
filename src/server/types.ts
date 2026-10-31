@@ -30,7 +30,7 @@ import type { LSPTransportEventMap, LSPTransportInterface } from '@src/core'
  * transport emits `exit`, a further `start` call spawns a fresh child. A `start` call made while a
  * child is still live is refused with an `LSPError` whose `code` property is `duplicate`.
  */
-export interface StdioClientTransportOptions {
+export interface LSPStdioTransportOptions {
 	readonly on?: EmitterHooks<LSPTransportEventMap>
 	readonly error?: EmitterErrorHandler
 	readonly server: {
@@ -51,6 +51,6 @@ export interface StdioClientTransportOptions {
  * reuses an identifier after it reaps the process that held it, so a caller that keeps the number
  * past its generation holds a number rather than a claim on that child.
  */
-export interface StdioClientTransportInterface extends LSPTransportInterface {
+export interface LSPStdioTransportInterface extends LSPTransportInterface {
 	readonly pid: number | undefined
 }

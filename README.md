@@ -4,7 +4,7 @@
 > carrying the base-protocol framing codec, the JSON-RPC and protocol guards, and an `LSPClient`
 > that completes the initialize handshake, owns opened document URIs, and selects pull or push
 > diagnostics from the server's own capabilities, beside a server environment whose
-> `StdioClientTransport` carries those bytes over a language server run as a child process.
+> `LSPStdioTransport` carries those bytes over a language server run as a child process.
 
 Create a client with the `createLSPClient` function, hand it a transport, and
 call `start()` before you open a document. The client reaches its peer only
@@ -29,12 +29,12 @@ npm install @orkestrel/lsp
 
 ```ts
 import { createLSPClient } from '@orkestrel/lsp'
-import { createStdioClientTransport } from '@orkestrel/lsp/server'
+import { createLSPStdioTransport } from '@orkestrel/lsp/server'
 import { pathToFileURL } from 'node:url'
 
 declare const directory: string
 
-const transport = createStdioClientTransport({
+const transport = createLSPStdioTransport({
 	server: { command: ['my-language-server', '--stdio'], directory },
 	grace: 5_000,
 })
@@ -54,8 +54,8 @@ and the `LSPError` failure type — see the
 
 Typed entry points per the `exports` field in `package.json`: the
 host-independent client, framing codec, guards, constants, and `LSPError` from
-`@orkestrel/lsp`, and the Node stdio transport — `StdioClientTransport` and
-`createStdioClientTransport` — from `@orkestrel/lsp/server`.
+`@orkestrel/lsp`, and the Node stdio transport — `LSPStdioTransport` and
+`createLSPStdioTransport` — from `@orkestrel/lsp/server`.
 
 ## License
 

@@ -1,6 +1,6 @@
 import type { LSPExit } from '@src/core'
 import { encodeLSPMessage, isLSPError } from '@src/core'
-import { StdioClientTransport } from '@src/server'
+import { LSPStdioTransport } from '@src/server'
 import { createRecorder, requireValue, waitForCondition } from '@orkestrel/test'
 import { createScratch, destroyScratch, isRunning } from '@orkestrel/test/server'
 import {
@@ -25,12 +25,12 @@ import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-describe('StdioClientTransport', () => {
+describe('LSPStdioTransport', () => {
 	it('settles a close issued inside the exit handler no earlier than the first close', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
 		const order = createRecorder<[string]>()
 		const joined = Promise.withResolvers<void>()
-		const transport = new StdioClientTransport(createPeerOptions({ grace: 2_000 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ grace: 2_000 }))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', () => {
 			order.handler('exit')
@@ -52,7 +52,7 @@ describe('StdioClientTransport', () => {
 	})
 	it('wires the configured listeners and error handler at construction', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport({
+		const transport = new LSPStdioTransport({
 			...createPeerOptions(),
 			on: { chunk: chunks.handler },
 		})
@@ -66,7 +66,7 @@ describe('StdioClientTransport', () => {
 		}
 
 		const faults = createRecorder<[unknown, string]>()
-		const faulty = new StdioClientTransport({
+		const faulty = new LSPStdioTransport({
 			...createPeerOptions(),
 			on: { chunk: throwTransportListenerFault },
 			error: faults.handler,
@@ -86,7 +86,7 @@ describe('StdioClientTransport', () => {
 	}, 15_000)
 
 	it('rejects an empty command as a spawn failure', async () => {
-		const transport = new StdioClientTransport({ server: { command: [] } })
+		const transport = new LSPStdioTransport({ server: { command: [] } })
 		const fault = await transport.start().then(
 			() => undefined,
 			(error: unknown) => error,
@@ -96,7 +96,7 @@ describe('StdioClientTransport', () => {
 	})
 
 	it('rejects an executable the host cannot launch as a spawn failure', async () => {
-		const transport = new StdioClientTransport({
+		const transport = new LSPStdioTransport({
 			server: { command: ['orkestrel-lsp-absent-executable', '--stdio'] },
 		})
 		const fault = await transport.start().then(
@@ -110,7 +110,7 @@ describe('StdioClientTransport', () => {
 	})
 
 	it('refuses a second start while its child is live', async () => {
-		const transport = new StdioClientTransport(createPeerOptions())
+		const transport = new LSPStdioTransport(createPeerOptions())
 		await transport.start()
 		try {
 			const fault = await transport.start().then(
@@ -125,7 +125,7 @@ describe('StdioClientTransport', () => {
 	})
 
 	it('refuses a start issued while a close is still in flight', async () => {
-		const transport = new StdioClientTransport(createPeerOptions({ grace: 2_000 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ grace: 2_000 }))
 		await transport.start()
 		const closing = transport.close()
 		const fault = await transport.start().then(
@@ -143,7 +143,7 @@ describe('StdioClientTransport', () => {
 
 	it('settles a concurrent close on the same termination the first close awaits', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport(createPeerOptions({ stubborn: true, grace: 200 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ stubborn: true, grace: 200 }))
 		transport.emitter.on('chunk', chunks.handler)
 		await transport.start()
 		await transport.send(ECHO)
@@ -166,7 +166,7 @@ describe('StdioClientTransport', () => {
 
 	it('delivers a frame split across host reads without joining the chunks', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport(createPeerOptions())
+		const transport = new LSPStdioTransport(createPeerOptions())
 		transport.emitter.on('chunk', chunks.handler)
 		await transport.start()
 		try {
@@ -185,7 +185,7 @@ describe('StdioClientTransport', () => {
 
 	it('delivers coalesced frames as the single chunk the host read', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport(createPeerOptions())
+		const transport = new LSPStdioTransport(createPeerOptions())
 		transport.emitter.on('chunk', chunks.handler)
 		await transport.start()
 		try {
@@ -205,7 +205,7 @@ describe('StdioClientTransport', () => {
 	it('carries the configured directory and environment into the child', async () => {
 		const scratch = createScratch({ prefix: 'lsp-peer-' })
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport(
+		const transport = new LSPStdioTransport(
 			createPeerOptions({
 				directory: scratch.path,
 				environment: { LSP_FIXTURE_VALUE: 'carried' },
@@ -233,7 +233,7 @@ describe('StdioClientTransport', () => {
 
 	it('gives the child this process environment when the options configure none', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport(createPeerOptions())
+		const transport = new LSPStdioTransport(createPeerOptions())
 		transport.emitter.on('chunk', chunks.handler)
 		await transport.start()
 		try {
@@ -254,7 +254,7 @@ describe('StdioClientTransport', () => {
 
 	it('reports the host identifier of the child owning the current generation', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
-		const transport = new StdioClientTransport(createPeerOptions({ grace: 2_000 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ grace: 2_000 }))
 		transport.emitter.on('chunk', chunks.handler)
 		expect(transport.pid).toBeUndefined()
 		await transport.start()
@@ -276,7 +276,7 @@ describe('StdioClientTransport', () => {
 	})
 
 	it('resolves send as false before the first start and after close resolves', async () => {
-		const transport = new StdioClientTransport(createPeerOptions())
+		const transport = new LSPStdioTransport(createPeerOptions())
 		expect(await transport.send(PING)).toBe(false)
 		await transport.start()
 		expect(await transport.send(PING)).toBe(true)
@@ -287,7 +287,7 @@ describe('StdioClientTransport', () => {
 	it('ends a cooperative child and surfaces its real exit', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
 		const exits = createRecorder<[LSPExit]>()
-		const transport = new StdioClientTransport(createPeerOptions({ grace: 2_000 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ grace: 2_000 }))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		await transport.start()
@@ -307,7 +307,7 @@ describe('StdioClientTransport', () => {
 	it('kills a child that outlives its grace window and leaves no process behind', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
 		const exits = createRecorder<[LSPExit]>()
-		const transport = new StdioClientTransport(createPeerOptions({ stubborn: true, grace: 200 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ stubborn: true, grace: 200 }))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		await transport.start()
@@ -328,7 +328,7 @@ describe('StdioClientTransport', () => {
 
 	it('emits the exit a child reports when it ends unprompted', async () => {
 		const exits = createRecorder<[LSPExit]>()
-		const transport = new StdioClientTransport(createPeerOptions())
+		const transport = new LSPStdioTransport(createPeerOptions())
 		transport.emitter.on('exit', exits.handler)
 		await transport.start()
 		await transport.send(
@@ -342,7 +342,7 @@ describe('StdioClientTransport', () => {
 	it('starts a fresh child after close resolves and after an unprompted exit', async () => {
 		const chunks = createRecorder<[Uint8Array]>()
 		const exits = createRecorder<[LSPExit]>()
-		const transport = new StdioClientTransport(createPeerOptions({ grace: 2_000 }))
+		const transport = new LSPStdioTransport(createPeerOptions({ grace: 2_000 }))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		const generations: number[] = []
@@ -380,7 +380,7 @@ describe('StdioClientTransport', () => {
 		const release = join(scratch.path, 'release')
 		const chunks = createRecorder<[Uint8Array]>()
 		const exits = createRecorder<[LSPExit]>()
-		const transport = new StdioClientTransport(createHolderOptions(release, 200))
+		const transport = new LSPStdioTransport(createHolderOptions(release, 200))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		await transport.start()
@@ -419,7 +419,7 @@ describe('StdioClientTransport', () => {
 		const release = join(scratch.path, 'release')
 		const chunks = createRecorder<[Uint8Array]>()
 		const exits = createRecorder<[LSPExit]>()
-		const transport = new StdioClientTransport(createHolderOptions(release, 200))
+		const transport = new LSPStdioTransport(createHolderOptions(release, 200))
 		transport.emitter.on('chunk', chunks.handler)
 		transport.emitter.on('exit', exits.handler)
 		await transport.start()

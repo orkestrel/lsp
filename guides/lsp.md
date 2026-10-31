@@ -4,7 +4,7 @@
 > carrying the base-protocol framing codec, the JSON-RPC and protocol guards, and an `LSPClient`
 > that completes the initialize handshake, owns opened document URIs, and selects pull or push
 > diagnostics from the server's own capabilities, beside a server environment whose
-> `StdioClientTransport` carries those bytes over a language server run as a child process.
+> `LSPStdioTransport` carries those bytes over a language server run as a child process.
 
 Source: [`src/core`](../src/core) and [`src/server`](../src/server). Published through
 `@orkestrel/lsp` and `@orkestrel/lsp/server`.
@@ -113,7 +113,7 @@ before the client destroys its emitter. At the deadline, the client emits an `LS
 
 ## Stdio client transport
 
-The server environment publishes `StdioClientTransport`, the byte transport over a language server run as
+The server environment publishes `LSPStdioTransport`, the byte transport over a language server run as
 a child process. It carries bytes and never frames: every standard-output chunk reaches the `chunk`
 event exactly as the host delivered it, so a frame split across reads and two frames coalesced into
 one read both arrive unaltered and the client's parser owns the framing. Standard error is read
@@ -133,12 +133,12 @@ Spawn a language server as a child process and drive it through the stdio transp
 
 ```ts
 import { createLSPClient } from '@orkestrel/lsp'
-import { createStdioClientTransport } from '@orkestrel/lsp/server'
+import { createLSPStdioTransport } from '@orkestrel/lsp/server'
 import { pathToFileURL } from 'node:url'
 
 declare const directory: string
 
-const transport = createStdioClientTransport({
+const transport = createLSPStdioTransport({
 	server: { command: ['my-language-server', '--stdio'], directory },
 	grace: 5_000,
 })
@@ -378,12 +378,12 @@ The server surface provides these exports.
 
 A `Shape` cell holds an interface's data members as bare names in braces, `?` marking an optional member and `plus` introducing its call-signature members, and a type alias's own type literal with a union's arms escaped as `\|`. An extended interface's name comes before `plus`, with the members it adds after. A function row's `Shape` cell holds its signature, and a guard row's the type it narrows to. A class row's `Shape` cell holds the interface it implements, or its constructor signature where it implements none.
 
-| Name                            | Kind      | Signature                                                                     | Summary                                                                                 |
-| ------------------------------- | --------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `StdioClientTransport`          | class     | `new (options: StdioClientTransportOptions) => StdioClientTransportInterface` | Streams Language Server Protocol bytes between a client and a child process over stdio. |
-| `createStdioClientTransport`    | function  | `(options: StdioClientTransportOptions) => StdioClientTransportInterface`     | Creates a byte transport over a Language Server Protocol child process.                 |
-| `StdioClientTransportInterface` | interface | `{ pid }`                                                                     | Defines the stdio transport's own surface beyond the byte transport it carries.         |
-| `StdioClientTransportOptions`   | interface | `{ on?, error?, server, grace? }`                                             | Configures a Language Server Protocol child process reached over its standard streams.  |
+| Name                         | Kind      | Signature                                                               | Summary                                                                                 |
+| ---------------------------- | --------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `LSPStdioTransport`          | class     | `new (options: LSPStdioTransportOptions) => LSPStdioTransportInterface` | Streams Language Server Protocol bytes between a client and a child process over stdio. |
+| `createLSPStdioTransport`    | function  | `(options: LSPStdioTransportOptions) => LSPStdioTransportInterface`     | Creates a byte transport over a Language Server Protocol child process.                 |
+| `LSPStdioTransportInterface` | interface | `{ pid }`                                                               | Defines the stdio transport's own surface beyond the byte transport it carries.         |
+| `LSPStdioTransportOptions`   | interface | `{ on?, error?, server, grace? }`                                       | Configures a Language Server Protocol child process reached over its standard streams.  |
 
 ### Client and transport contracts
 
@@ -550,7 +550,7 @@ A `Shape` cell holds the constant's declared type.
 - [`tests/src/core/helpers.test.ts`](../tests/src/core/helpers.test.ts) — `encodeLSPMessage`, the `scanLSPBoundary` index, the `readLSPHeader` and `readLSPBody` grammars with their coded refusals, and `waitForDeadline`.
 - [`tests/src/core/parsers.test.ts`](../tests/src/core/parsers.test.ts) — `parseLSPMessages` over split, coalesced, and malformed frames, and the state it retains between calls.
 - [`tests/src/core/validators.test.ts`](../tests/src/core/validators.test.ts) — every guard accepts its own shape, refuses a near miss, and stays total for a hostile value.
-- [`tests/src/server/factories.test.ts`](../tests/src/server/factories.test.ts) — `createStdioClientTransport` returns a working `StdioClientTransportInterface` over the options it is handed.
-- [`tests/src/server/transports/StdioClientTransport.test.ts`](../tests/src/server/transports/StdioClientTransport.test.ts) — spawning, byte carriage into the child and out of it, generation ownership and reconnection, `pid`, and the bounded termination window against a child whose grandchild holds its standard output.
+- [`tests/src/server/factories.test.ts`](../tests/src/server/factories.test.ts) — `createLSPStdioTransport` returns a working `LSPStdioTransportInterface` over the options it is handed.
+- [`tests/src/server/transports/LSPStdioTransport.test.ts`](../tests/src/server/transports/LSPStdioTransport.test.ts) — spawning, byte carriage into the child and out of it, generation ownership and reconnection, `pid`, and the bounded termination window against a child whose grandchild holds its standard output.
 - [`tests/integration.test.ts`](../tests/integration.test.ts) — the core client driving a real language server child through the stdio transport.
 - [`tests/conformance.test.ts`](../tests/conformance.test.ts) — the subset of Language Server Protocol 3.18 this package speaks, read against the mirrored metaModel instance.
