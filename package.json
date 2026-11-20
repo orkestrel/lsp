@@ -1,6 +1,6 @@
 {
 	"name": "@orkestrel/lsp",
-	"version": "0.0.17",
+	"version": "0.0.18",
 	"description": "A typed Language Server Protocol client over an injected byte transport — base-protocol framing, protocol guards, and a stdio child-process transport. Part of the @orkestrel line.",
 	"keywords": [
 		"diagnostics",
@@ -87,7 +87,7 @@
 		"@orkestrel/contract": "^0.0.27",
 		"@orkestrel/emitter": "^0.0.19",
 		"@orkestrel/jsonrpc": "^0.0.6",
-		"@orkestrel/process": "^0.0.22"
+		"@orkestrel/process": "^0.0.23"
 	},
 	"devDependencies": {
 		"@microsoft/api-extractor": "^7.60.1",
